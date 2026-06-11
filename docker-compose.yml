@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bidmont-app:
+    build: .
+    container_name: bidmont-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - bidmont-data:/app/backend
+    restart: unless-stopped
+
+volumes:
+  bidmont-data:

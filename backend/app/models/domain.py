@@ -2,8 +2,10 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text
 from sqlalchemy.orm import relationship
-from .base import Base
 import enum
+
+from .base import Base
+
 
 class UserRole(str, enum.Enum):
     buyer = "buyer"
@@ -11,17 +13,20 @@ class UserRole(str, enum.Enum):
     corporate_seller = "corporate_seller"
     admin = "admin"
 
+
 class AuctionStatus(str, enum.Enum):
     pending_approval = "pending_approval"
     active = "active"
     completed = "completed"
     cancelled = "cancelled"
 
+
 def generate_uuid():
     return str(uuid.uuid4())
 
+
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
@@ -37,23 +42,24 @@ class User(Base):
     reset_token_expires_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
-    # String-based UUID for both SQLite and PostgreSQL compatibility
+
 
 class Category(Base):
-    __tablename__ = 'categories'
+    __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, nullable=False)
-    parent_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     status = Column(String, default="active")
 
+
 class Auction(Base):
-    __tablename__ = 'auctions'
+    __tablename__ = "auctions"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    seller_id = Column(String, ForeignKey('users.id'), nullable=False)
-    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    seller_id = Column(String, ForeignKey("users.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     start_price = Column(Float, nullable=False)
@@ -62,32 +68,61 @@ class Auction(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     status = Column(Enum(AuctionStatus), default=AuctionStatus.pending_approval)
-    winner_user_id = Column(String, ForeignKey('users.id'), nullable=True)
+    winner_user_id = Column(String, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Vehicle-specific fields (nullable)
+    brand = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    year = Column(Integer, nullable=True)
+    mileage = Column(Integer, nullable=True)
+    fuel_type = Column(String, nullable=True)
+    transmission = Column(String, nullable=True)
+    damage_status = Column(String, nullable=True)
+
+    # Equipment-specific fields (nullable)
+    equipment_brand = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
+    condition = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+
+    # Relationships (for reference)
+    seller = relationship("User", foreign_keys=[seller_id])
+    winner = relationship("User", foreign_keys=[winner_user_id])
+    images = relationship(
+        "AuctionImage", back_populates="auction", cascade="all, delete-orphan"
+    )
+
+
 class Bid(Base):
-    __tablename__ = 'bids'
+    __tablename__ = "bids"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    auction_id = Column(String, ForeignKey('auctions.id'), nullable=False)
-    user_id = Column(String, ForeignKey('users.id'), nullable=False)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     amount = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     ip_address = Column(String)
 
+    auction = relationship("Auction", backref="bids")
+
+
 class AuctionImage(Base):
-    __tablename__ = 'auction_images'
+    __tablename__ = "auction_images"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    auction_id = Column(String, ForeignKey('auctions.id'), nullable=False)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
     image_url = Column(String, nullable=False)
     sort_order = Column(Integer, default=0)
 
+    auction = relationship("Auction", back_populates="images")
+
+
 class AuditLog(Base):
-    __tablename__ = 'audit_logs'
+    __tablename__ = "audit_logs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey('users.id'), nullable=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(String, nullable=False)

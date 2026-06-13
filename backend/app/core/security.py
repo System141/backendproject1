@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.models.domain import User
+from app.models.domain import User, UserRole
 
 # ---- Configuration ----
 JWT_SECRET = os.getenv("JWT_SECRET", "bidmont-dev-secret-change-in-production")
@@ -87,3 +87,31 @@ def get_current_user_optional(
     if payload is None:
         return None
     return payload
+
+
+def require_role(*roles: UserRole):
+    """Factory that returns a dependency requiring one of the given roles."""
+
+    async def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of these roles: {', '.join(r.value for r in roles)}",
+            )
+        return current_user
+
+    return role_checker
+
+
+async def get_current_seller(
+    current_user: User = Depends(require_role(UserRole.seller, UserRole.corporate_seller)),
+) -> User:
+    """Dependency: current user must be a seller or corporate_seller."""
+    return current_user
+
+
+async def get_current_admin(
+    current_user: User = Depends(require_role(UserRole.admin)),
+) -> User:
+    """Dependency: current user must be admin."""
+    return current_user

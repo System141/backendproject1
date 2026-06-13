@@ -6,6 +6,9 @@ services:
     container_name: bidmont-app
     ports:
       - "8000:8000"
+    environment:
+      - JWT_SECRET=bidmont-dev-secret-change-in-production
+      - ENVIRONMENT=development
     volumes:
       - bidmont-data:/app/backend
     restart: unless-stopped

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text
+from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -27,10 +27,16 @@ class User(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
-    phone = Column(String)
+    phone = Column(String, unique=True)
     password_hash = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.buyer)
     status = Column(String, default="active")
+    accepted_terms = Column(Boolean, default=False, nullable=False)
+    accepted_privacy = Column(Boolean, default=False, nullable=False)
+    marketing_consent = Column(Boolean, default=False, nullable=False)
+    reset_token_hash = Column(String, nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Category(Base):

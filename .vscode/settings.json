@@ -1,0 +1,14 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "postgresql://bidmont:rZV7cbpatHkGLUPYUrMtf9stiJTeGWLM@dpg-d8lijsbbc2fs739ego8g-a.oregon-postgres.render.com/bidmont",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "test",
+            "username": "bidmont",
+            "database": "bidmont"
+        }
+    ]
+}

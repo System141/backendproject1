@@ -15,6 +15,10 @@ COPY index.html /app/
 # Expose the port
 EXPOSE 8000
 
+# Environment variables for production (override in Render dashboard)
+ENV JWT_SECRET="bidmont-production-secret-change-me"
+ENV ENVIRONMENT="production"
+
 # Run the application from the backend directory
 WORKDIR /app/backend
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

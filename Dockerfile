@@ -4,13 +4,18 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY backend/requirements.txt /app/backend/
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Install system dependencies for psycopg2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for layer caching
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Copy the rest of the application
 COPY backend /app/backend/
-COPY index.html /app/
+COPY index.html /app/index.html
 
 # Expose the port
 EXPOSE 8000
@@ -18,6 +23,7 @@ EXPOSE 8000
 # Environment variables for production (override in Render dashboard)
 ENV JWT_SECRET="bidmont-production-secret-change-me"
 ENV ENVIRONMENT="production"
+ENV CORS_ORIGINS="https://bidmont.onrender.com"
 
 # Run the application from the backend directory
 WORKDIR /app/backend

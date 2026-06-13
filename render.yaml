@@ -1,0 +1,34 @@
+# Render Blueprint — one-click deploy configuration
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Web Service: FastAPI backend
+  - type: web
+    name: bidmont-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/health
+    domains:
+      - bidmont.onrender.com
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bidmont-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://bidmont.onrender.com
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+databases:
+  - name: bidmont-db
+    plan: free
+    region: frankfurt
+    databaseName: bidmont
+    ipAllowList: [] # allow only internal connections

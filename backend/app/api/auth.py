@@ -1,9 +1,11 @@
 import os
 import uuid
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.database import get_db
 from app.core.security import (
@@ -24,9 +26,13 @@ from app.schemas.auth import (
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Per-endpoint rate limits
+limiter = Limiter(key_func=get_remote_address)
+
 
 @auth_router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def register(request: Request, req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     # Check required privacy fields
     if not req.accepted_terms or not req.accepted_privacy:
         raise HTTPException(
@@ -94,7 +100,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @auth_router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Find user by email
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalars().first()
@@ -129,7 +136,8 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @auth_router.post("/forgot-password")
-async def forgot_password(req: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def forgot_password(request: Request, req: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
     # Find user by email
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalars().first()
@@ -153,7 +161,8 @@ async def forgot_password(req: PasswordResetRequest, db: AsyncSession = Depends(
 
 
 @auth_router.post("/reset-password")
-async def reset_password(req: PasswordResetConfirm, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncSession = Depends(get_db)):
     # Find user by reset token
     result = await db.execute(
         select(User).where(

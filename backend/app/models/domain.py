@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from .base import Base
 import enum
@@ -38,6 +37,7 @@ class User(Base):
     reset_token_expires_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # String-based UUID for both SQLite and PostgreSQL compatibility
 
 class Category(Base):
     __tablename__ = 'categories'

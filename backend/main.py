@@ -7,7 +7,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.core.database import engine, Base
-from app.api import auth_router, users_router, auctions_router, uploads_router
+from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router
 
 # Import all models so Base metadata is populated
 from app.models import *
@@ -56,6 +56,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(auctions_router)
 app.include_router(uploads_router)
+app.include_router(bids_router)
 
 
 # ---- Health check (required for Render) ----

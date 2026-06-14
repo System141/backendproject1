@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  bidmont-db:
+    image: postgres:16-alpine
+    container_name: bidmont-db
+    environment:
+      POSTGRES_USER: bidmont
+      POSTGRES_PASSWORD: bidmont-dev
+      POSTGRES_DB: bidmont
+    ports:
+      - "5432:5432"
+    volumes:
+      - bidmont-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bidmont"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   bidmont-app:
     build: .
     container_name: bidmont-app
@@ -9,9 +27,14 @@ services:
     environment:
       - JWT_SECRET=bidmont-dev-secret-change-in-production
       - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://bidmont:bidmont-dev@bidmont-db:5432/bidmont
+    depends_on:
+      bidmont-db:
+        condition: service_healthy
     volumes:
-      - bidmont-data:/app/backend
+      - ./backend:/app/backend
     restart: unless-stopped
 
 volumes:
   bidmont-data:
+  bidmont-pgdata:

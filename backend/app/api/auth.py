@@ -13,6 +13,7 @@ from app.core.security import (
     verify_password,
     create_access_token,
     decode_access_token,
+    get_current_user,
 )
 from app.models.domain import User, UserRole
 from app.schemas.auth import (
@@ -131,6 +132,26 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
             role=user.role.value,
             status=user.status,
             created_at=str(user.created_at) if user.created_at else "",
+        ),
+    )
+
+
+@auth_router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    current_user: User = Depends(get_current_user),
+):
+    """Refresh access token. Requires a valid (not expired) token."""
+    new_token = create_access_token(data={"sub": current_user.id, "role": current_user.role.value})
+    return TokenResponse(
+        access_token=new_token,
+        user=UserResponse(
+            id=current_user.id,
+            name=current_user.name,
+            email=current_user.email,
+            phone=current_user.phone,
+            role=current_user.role.value,
+            status=current_user.status,
+            created_at=str(current_user.created_at) if current_user.created_at else "",
         ),
     )
 

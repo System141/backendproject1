@@ -14,7 +14,6 @@ from app.models.domain import (
     AuctionStatus,
     Bid,
     AuctionImage,
-    AuditLog,
 )
 from app.core.security import hash_password
 
@@ -245,20 +244,3 @@ class TestAuctionImageModel:
         assert img.image_url == "https://example.com/image.jpg"
         assert img.sort_order == 1
 
-
-class TestAuditLogModel:
-    async def test_create_audit_log(self, db_session: AsyncSession, test_user: User):
-        log = AuditLog(
-            id=str(uuid.uuid4()),
-            user_id=test_user.id,
-            action="USER_LOGIN",
-            entity_type="user",
-            entity_id=test_user.id,
-        )
-        db_session.add(log)
-        await db_session.commit()
-        await db_session.refresh(log)
-
-        assert log.action == "USER_LOGIN"
-        assert log.entity_type == "user"
-        assert log.created_at is not None

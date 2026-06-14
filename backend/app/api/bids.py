@@ -8,6 +8,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.domain import Auction, AuctionStatus, Bid, User
 from app.schemas.bid import BidCreateRequest, BidResponse, BidHistoryResponse
+from app.api.ws import manager
+from app.services.notifications import send_notification, NotificationType
 
 bids_router = APIRouter(prefix="/api/auctions", tags=["bids"])
 
@@ -73,6 +75,50 @@ async def place_bid(
     db.add(bid)
     await db.commit()
     await db.refresh(bid)
+
+    # Find previous highest bidder (for outbid notification)
+    prev_bid_result = await db.execute(
+        select(Bid)
+        .where(Bid.auction_id == auction_id, Bid.user_id != current_user.id)
+        .order_by(desc(Bid.amount))
+        .limit(1)
+    )
+    previous_highest_bidder = prev_bid_result.scalars().first()
+
+    # Notify seller about new bid
+    await send_notification(
+        db, auction.seller_id,
+        NotificationType.bid_received,
+        f"New bid on {auction.title}",
+        f"Your auction '{auction.title}' received a bid of ${req.amount:.2f}.",
+        auction_id=auction_id,
+        send_email=True,
+    )
+
+    # Notify previous highest bidder that they've been outbid
+    if previous_highest_bidder:
+        await send_notification(
+            db, previous_highest_bidder.user_id,
+            NotificationType.outbid,
+            f"Outbid on {auction.title}",
+            f"Someone placed a higher bid of ${req.amount:.2f} on '{auction.title}'.",
+            auction_id=auction_id,
+            send_email=True,
+        )
+
+    # Broadcast new bid to all connected clients in the auction room
+    await manager.broadcast(auction_id, {
+        "type": "new_bid",
+        "auction_id": auction_id,
+        "bid": {
+            "id": bid.id,
+            "user_id": bid.user_id,
+            "amount": bid.amount,
+            "created_at": bid.created_at.isoformat() if bid.created_at else None,
+        },
+        "current_price": auction.current_price,
+        "end_time": auction.end_time.isoformat() if auction.end_time else None,
+    })
 
     return BidResponse(
         id=bid.id,

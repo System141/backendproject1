@@ -118,12 +118,79 @@ class AuctionImage(Base):
     auction = relationship("Auction", back_populates="images")
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
+class PaymentStatus(str, enum.Enum):
+    pending = "pending"
+    completed = "completed"
+    failed = "failed"
+    refunded = "refunded"
+
+
+class Payment(Base):
+    __tablename__ = "payments"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=True)
-    action = Column(String, nullable=False)
-    entity_type = Column(String, nullable=False)
-    entity_id = Column(String, nullable=False)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
+    buyer_id = Column(String, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
+    stripe_session_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    auction = relationship("Auction")
+    buyer = relationship("User", foreign_keys=[buyer_id])
+
+
+class Commission(Base):
+    __tablename__ = "commissions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
+    seller_id = Column(String, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    rate = Column(Float, nullable=False)  # e.g. 0.05 for 5%
+    status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    auction = relationship("Auction")
+    seller = relationship("User", foreign_keys=[seller_id])
+
+
+class NotificationType(str, enum.Enum):
+    outbid = "outbid"
+    bid_received = "bid_received"
+    auction_won = "auction_won"
+    auction_lost = "auction_lost"
+    auction_ending_soon = "auction_ending_soon"
+    payment_received = "payment_received"
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    type = Column(Enum(NotificationType), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    auction = relationship("Auction")
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    subject = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String, default="open")  # open, in_progress, resolved, closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+

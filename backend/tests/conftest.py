@@ -1,4 +1,5 @@
 import asyncio
+import os
 import uuid
 from datetime import datetime, timedelta
 from typing import AsyncGenerator
@@ -8,6 +9,9 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
+
+# Set JWT_SECRET before any security imports
+os.environ["JWT_SECRET"] = "test-secret-do-not-use-in-production"
 
 # We need to override the database URL before any app imports resolve the engine
 import app.core.database as db_module

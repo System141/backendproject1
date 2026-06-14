@@ -3,3 +3,8 @@ from .users import users_router
 from .auctions import auctions_router
 from .uploads import uploads_router
 from .bids import bids_router
+from .ws import ws_router
+from .payments import payments_router
+from .support import support_router
+from .admin import admin_router
+from .notifications import notifications_router

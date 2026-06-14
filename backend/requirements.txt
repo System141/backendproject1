@@ -22,3 +22,5 @@ starlette==1.3.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.49.0
+
+--extra-index-url=https://packagecloud.io/github/git-lfs/pypi/simple

@@ -8,7 +8,6 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    region: frankfurt
     healthCheckPath: /api/health
     domains:
       - bidmont.onrender.com
@@ -29,6 +28,5 @@ services:
 databases:
   - name: bidmont-db
     plan: free
-    region: frankfurt
     databaseName: bidmont
     ipAllowList: [] # allow only internal connections

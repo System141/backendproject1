@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,10 @@ from app.api import auth_router, users_router, auctions_router, uploads_router, 
 # Import all models so Base metadata is populated
 from app.models import *
 
+# ---- Logging ----
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bidmont")
+
 
 # ---- Rate limiter ----
 limiter = Limiter(key_func=get_remote_address)
@@ -21,11 +26,12 @@ limiter = Limiter(key_func=get_remote_address)
 # ---- Auto-migration: add missing columns safely ----
 MISSING_COLUMNS = {
     "users": [
-        ("accepted_terms", "BOOLEAN DEFAULT FALSE NOT NULL"),
-        ("accepted_privacy", "BOOLEAN DEFAULT FALSE NOT NULL"),
-        ("marketing_consent", "BOOLEAN DEFAULT FALSE NOT NULL"),
+        ("accepted_terms", "BOOLEAN DEFAULT FALSE"),
+        ("accepted_privacy", "BOOLEAN DEFAULT FALSE"),
+        ("marketing_consent", "BOOLEAN DEFAULT FALSE"),
         ("reset_token_hash", "VARCHAR"),
         ("reset_token_expires_at", "TIMESTAMP"),
+        ("phone", "VARCHAR"),
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
         ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ],
@@ -56,28 +62,31 @@ MISSING_COLUMNS = {
 }
 
 
-async def _auto_migrate():
+async def run_migration():
     """Add missing columns to existing tables. Safe for repeated runs."""
     async with engine.begin() as conn:
         for table, columns in MISSING_COLUMNS.items():
             for col_name, col_type in columns:
                 try:
-                    await conn.execute(
-                        text(f'ALTER TABLE "{table}" ADD COLUMN {col_name} {col_type}')
-                    )
-                except Exception:
-                    pass  # Column already exists, ignore
+                    sql = text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS {col_name} {col_type}')
+                    await conn.execute(sql)
+                    logger.info(f"Migration: added {table}.{col_name}")
+                except Exception as e:
+                    logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: create tables
+    logger.info("Creating database tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Auto-migrate missing columns
-    await _auto_migrate()
+    logger.info("Tables created. Running auto-migration...")
+    await run_migration()
+    logger.info("Startup complete.")
     yield
     # Shutdown: nothing to clean up
+    logger.info("Shutdown complete.")
 
 
 app = FastAPI(

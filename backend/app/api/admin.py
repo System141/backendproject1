@@ -1,8 +1,9 @@
 """Admin panel API endpoints. Requires admin role."""
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, text
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, hash_password, create_access_token
@@ -12,10 +13,63 @@ from app.models.domain import (
 from app.schemas.auth import UserResponse, TokenResponse
 from app.schemas.auction import AuctionResponse
 
+logger = logging.getLogger("bidmont")
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-# ---- Seed Admin (first-run only) ----
+# ---- Auto-migration helper (raw SQL to avoid ORM column issues) ----
+MISSING_COLUMNS_SQL = {
+    "users": [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_consent BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ],
+    "auctions": [
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS brand VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS model VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS year INTEGER",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS mileage INTEGER",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS fuel_type VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS transmission VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS damage_status VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS equipment_brand VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS serial_number VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS condition VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS location VARCHAR",
+        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS winner_user_id VARCHAR",
+    ],
+    "bids": [
+        "ALTER TABLE bids ADD COLUMN IF NOT EXISTS ip_address VARCHAR",
+    ],
+    "payments": [
+        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR",
+        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ],
+    "support_tickets": [
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ],
+}
+
+
+async def run_migration_raw(db: AsyncSession):
+    """Run raw ALTER TABLE migrations to add missing columns."""
+    for table, statements in MISSING_COLUMNS_SQL.items():
+        for sql in statements:
+            try:
+                await db.execute(text(sql))
+                await db.commit()
+                logger.info(f"Migration: executed on {table}")
+            except Exception as e:
+                await db.rollback()
+                logger.warning(f"Migration: skipped on {table} ({e})")
+
+
+# ---- Seed Admin (first-run only, uses raw SQL) ----
 @admin_router.get("/seed", response_model=TokenResponse)
 async def seed_admin(
     email: str = Query("admin@bidmont.me", description="Admin email"),
@@ -23,46 +77,55 @@ async def seed_admin(
     db: AsyncSession = Depends(get_db),
 ):
     """Create the first admin user. Only works if no admin exists yet."""
-    # Check if any admin already exists
-    result = await db.execute(select(User).where(User.role == UserRole.admin))
-    existing_admin = result.scalars().first()
-    if existing_admin:
+    # Step 1: Run migrations first
+    await run_migration_raw(db)
+
+    # Step 2: Check if any admin already exists (raw SQL to avoid ORM column mapping)
+    result = await db.execute(text("SELECT id FROM users WHERE role = 'admin' LIMIT 1"))
+    if result.first():
         raise HTTPException(status_code=400, detail="Admin user already exists")
 
-    # Check if email is taken by another role
-    result = await db.execute(select(User).where(User.email == email))
-    existing_user = result.scalars().first()
-    if existing_user:
+    # Step 3: Check if email is taken
+    result = await db.execute(text("SELECT id FROM users WHERE email = :email"), {"email": email})
+    if result.first():
         raise HTTPException(status_code=400, detail="Email already in use")
 
-    import uuid
-    user = User(
-        id=str(uuid.uuid4()),
-        name="Admin",
-        email=email,
-        password_hash=hash_password(password),
-        role=UserRole.admin,
-        status="active",
-        accepted_terms=True,
-        accepted_privacy=True,
-        marketing_consent=False,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    # Step 4: Create admin with raw SQL (only essential columns)
+    admin_id = str(uuid.uuid4())
+    password_hash_value = hash_password(password)
+    now_str = "NOW()"
 
-    access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
+    await db.execute(
+        text("""
+            INSERT INTO users (id, name, email, password_hash, role, status, accepted_terms, accepted_privacy, marketing_consent, created_at, updated_at)
+            VALUES (:id, :name, :email, :password_hash, :role, :status, :accepted_terms, :accepted_privacy, :marketing_consent, NOW(), NOW())
+        """),
+        {
+            "id": admin_id,
+            "name": "Admin",
+            "email": email,
+            "password_hash": password_hash_value,
+            "role": "admin",
+            "status": "active",
+            "accepted_terms": True,
+            "accepted_privacy": True,
+            "marketing_consent": False,
+        },
+    )
+    await db.commit()
+
+    access_token = create_access_token(data={"sub": admin_id, "role": "admin"})
 
     return TokenResponse(
         access_token=access_token,
         user=UserResponse(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            phone=user.phone,
-            role=user.role.value,
-            status=user.status,
-            created_at=str(user.created_at) if user.created_at else "",
+            id=admin_id,
+            name="Admin",
+            email=email,
+            phone=None,
+            role="admin",
+            status="active",
+            created_at="",
         ),
     )
 

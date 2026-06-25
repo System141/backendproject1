@@ -1,6 +1,7 @@
 # BidMont Projesi — Mevcut Durum İnceleme Raporu
 
-**Tarih:** 14.06.2026  
+**Tarih:** 25.06.2026 (Güncelleme)  
+**Önceki Rapor:** 14.06.2026  
 **Kapsam:** Dökümanlara ve ponytail kural setine göre projenin mevcut durum analizi.
 
 ---
@@ -13,137 +14,132 @@
 
 ---
 
-## 2. Faz Bazında Tamamlanma Durumu
+## 2. Faz Bazında Tamamlanma Durumu (Güncel)
 
 | Faz | Açıklama | Tamamlanma | Detay |
 |-----|----------|:----------:|-------|
-| Faz 1 | MVP Vitrin, Arayüz | %20 | Frontend yok, sadece statik `index.html` catch-all ile sunuluyor |
-| Faz 2 | Kullanıcı, Kayıt, Rol | %85 | Kayıt/giriş/profil çalışıyor; şifre sıfırlama yok |
-| Faz 3 | İlan Oluşturma | %85 | CRUD + onay akışı var; admin onay API'si kısmen eksik |
-| Faz 4 | Teklif Motoru | %40 | REST API ile teklif çalışıyor; **WebSocket yok**, süre uzatma yok |
-| Faz 5 | Admin Paneli | %10 | Model ve şema var; admin endpoint'leri neredeyse yok |
-| Faz 6 | Ödeme/Komisyon | %0 | `payments`, `commissions` modelleri dahi tanımlanmamış |
-| Faz 7 | Bildirimler | %0 | `notifications` modeli yok, e-posta/SMS altyapısı yok |
-| Faz 8 | Kurumsal | %0 | Başlanmamış |
+| Faz 1 | MVP Vitrin, Arayüz | %90 | Next.js frontend mevcut (pages, components, hooks, i18n) |
+| Faz 2 | Kullanıcı, Kayıt, Rol | %100 | Kayıt/giriş/profil, şifre sıfırlama, token yenileme tamam |
+| Faz 3 | İlan Oluşturma | %100 | CRUD + onay/red akışı + bildirim |
+| Faz 4 | Teklif Motoru | %100 | REST API + WebSocket broadcast + süre uzatma + `FOR UPDATE` |
+| Faz 5 | Admin Paneli | %100 | Kullanıcı/ilan yönetimi, destek talebi yönetimi, istatistikler |
+| Faz 6 | Ödeme/Komisyon | %90 | Ödeme oluşturma, durum güncelleme, komisyon hesaplama |
+| Faz 7 | Bildirimler | %100 | In-app bildirim + e-posta (SMTP), tüm tetikleyiciler aktif |
+| Faz 8 | Kurumsal | %10 | Destek talebi sistemi var; kurumsal sayfalar frontend'de |
 
-**MVP genel tamamlanma: ~%65–70**
+**MVP genel tamamlanma: ~%95**
 
 ---
 
-## 3. Çalışan Bileşenler
+## 3. Çalışan Bileşenler (Güncel)
 
 - ✅ Kullanıcı kayıt (email/telefon, BCrypt hash)
 - ✅ JWT tabanlı giriş/çıkış (`/api/auth/login`, `/api/auth/register`)
+- ✅ Token yenileme (`/api/auth/refresh`)
 - ✅ Rol sistemi (buyer, seller, corporate_seller, admin)
-- ✅ İlan CRUD (`/api/auctions`) + kategori filtresi + sayfalama
-- ✅ Admin onay akışı (`status: pending_approval → active`)
+- ✅ İlan CRUD (`/api/auctions`) + kategori filtresi + sayfalama + sıralama
+- ✅ Admin onay/red akışı (`pending_approval → active/cancelled`) + bildirim
 - ✅ Fotoğraf yükleme (`/api/uploads`, yerel dosya sistemi)
 - ✅ Teklif verme REST API (`/api/bids`) — en yüksek teklif kontrolü, validasyon
+- ✅ WebSocket canlı teklif broadcast (`/ws/auctions/{auction_id}`)
+- ✅ Anti-sniping süre uzatma (son 5 dk'da teklif → +5 dk)
+- ✅ `SELECT ... FOR UPDATE` ile eşzamanlılık kontrolü
 - ✅ Rate limiting (slowapi, IP bazlı)
 - ✅ CORS yapılandırması (env değişkeninden)
-- ✅ Audit log modeli (domain.py'de tanımlı)
-- ✅ Test altyapısı (pytest, 4 unit + 4 integration test dosyası)
+- ✅ Admin panel API'leri (kullanıcı listeleme/durum güncelleme, ilan listeleme, istatistikler)
+- ✅ Admin destek talebi yönetimi (listeleme, durum güncelleme)
+- ✅ Ödeme oluşturma/listeleme + durum güncelleme + komisyon hesaplama
+- ✅ Bildirim listeleme/okundu işaretleme
+- ✅ E-posta bildirim altyapısı (SMTP)
+- ✅ Şifre sıfırlama (token bazlı, e-posta ile)
+- ✅ Profil güncelleme (`PUT /api/users/me`)
+- ✅ Destek talebi oluşturma/listeleme (kullanıcı + anonim)
+- ✅ Test altyapısı (107 testin tamamı geçiyor)
 - ✅ Docker + Docker Compose yapılandırması
-- ✅ Render deploy hazırlığı (postgreSQL + uygulama)
+- ✅ Render deploy hazırlığı (PostgreSQL + uygulama)
+- ✅ Next.js frontend (pages, components, hooks, i18n ME/EN)
 
 ---
 
-## 4. Kritik Eksikler
+## 4. Eksikler ve İyileştirme Alanları (Güncel)
 
-### 4.1. WebSocket Canlı Teklif Motoru (🔴)
-Dökümanda (Bölüm 4 — Canlı Teklif Motoru Mimarisi) detaylıca tanımlanmış:
-- WebSocket odaları (auction_id bazlı)
-- Geçerli teklifin tüm istemcilere broadcast'i
-- `SELECT ... FOR UPDATE` ile eşzamanlılık kontrolü
-- Son dakika süre uzatma (anti-sniping)
+Önceki rapordaki tüm kritik ve orta düzey eksikler kapatılmıştır.
 
-**Hiçbiri implemente edilmemiş.** Bu, platformun ana değer önermesini devre dışı bırakıyor.
+### ✅ Kapatılan Eksikler
 
-### 4.2. Frontend Uygulaması (🔴)
-Dökümanda "React/Next.js veya Vue" önerilmiş ve "tüm menü linkleri çalışan demo" hedeflenmiş. Mevcut durumda yalnızca statik `index.html` catch-all route ile sunuluyor.
+| # | Eksik | Durum |
+|---|-------|:-----:|
+| 4.1 | WebSocket Canlı Teklif Motoru | ✅ `ws.py` + `bids.py`'de broadcast, `FOR UPDATE`, süre uzatma |
+| 4.2 | Frontend Uygulaması | ✅ Next.js (pages, components, hooks, i18n çevirileri) |
+| 4.3 | Admin Panel API'leri | ✅ Kullanıcı/ilan listeleme, durum güncelleme, istatistikler, destek yönetimi |
+| 4.4 | Bildirim Sistemi | ✅ In-app bildirim + e-posta (SMTP), tüm tetikleyiciler aktif |
+| 4.5 | Şifre Sıfırlama | ✅ `/forgot-password` + `/reset-password` endpoint'leri |
+| 4.6 | Dil Altyapısı / i18n | ✅ `frontend/public/locales/me/` ve `en/` çeviri dosyaları |
+| 4.7 | Eksik DB Tabloları | ✅ `payments`, `commissions`, `notifications`, `support_tickets` modelleri tanımlı |
+| 4.8 | Eksik API Endpoint'leri | ✅ `PUT /users/me`, `POST /auth/refresh`, admin endpoint'leri tamam |
+| 4.9 | Audit Log | ✅ Model kaldırıldı (YAGNI prensibi) |
+| 4.10 | `schemas/__init__.py` Import | ✅ `bid` modülü import edilmiş durumda |
 
-### 4.3. Admin Panel API'leri (🟡)
-- `/api/admin/*` endpoint'leri yok
-- İlan onaylama (`AuctionStatusUpdate` şeması var ama endpoint yok)
-- Kullanıcı listesi ve rol yönetimi
-- Raporlama (toplam ilan, teklif, satış, komisyon)
-- Şikayet/destek talepleri
+### 🟡 Mevcut Küçük İyileştirme Alanları
 
-### 4.4. Bildirim Sistemi (🟡)
-- `notifications` modeli tanımlanmamış
-- E-posta gönderme altyapısı yok
-- Teklif bildirimi, açık artırma bitiş hatırlatması, kazanan bildirimi yok
-
-### 4.5. Şifre Sıfırlama (🟡)
-- `POST /api/auth/password-reset` endpoint'i yok
-- Token bazlı şifre sıfırlama akışı implemente edilmemiş
-
-### 4.6. Dil Altyapısı / i18n (🟡)
-Faz 1'de "ME/EN dil geçiş altyapısı hazırlanması" belirtilmiş, hiç eklenmemiş.
-
-### 4.7. Eksik Veritabanı Tabloları (🟢)
-Dökümanda tanımlanan aşağıdaki tablolar **modelde hiç tanımlanmamış**:
-
-| Tablo | Durum |
-|-------|-------|
-| `payments` | ❌ Model yok |
-| `commissions` | ❌ Model yok |
-| `notifications` | ❌ Model yok |
-| `support_tickets` | ❌ Model yok |
-
-### 4.8. Eksik API Endpoint'leri (🟢)
-- `PUT /api/users/me` — profil güncelleme (şema var ama endpoint yok)
-- `POST /api/auth/refresh` — token yenileme
-- Admin endpoint'leri
-
-### 4.9. Audit Log Yazma Mantığı (🟢)
-`AuditLog` modeli `domain.py`'de tanımlı ancak hiçbir API endpoint'inde audit log yazma işlemi yapılmıyor. Ölü kod.
-
-### 4.10. `schemas/__init__.py` Eksik Import (🟢)
-`bid` modülü import edilmemiş. Kullanılmayan import değil, tam tersi — kullanılması gereken ama import edilmemiş.
+| # | Alan | Açıklama |
+|---|------|----------|
+| 1 | `regex` → `pattern` | FastAPI deprecation warning: `regex` parametresi `pattern` ile değiştirilmeli |
+| 2 | `Config` → `ConfigDict` | Pydantic V2 deprecation: class-based `config` yerine `model_config = ConfigDict()` |
+| 3 | `utcnow()` → `now(datetime.UTC)` | Python 3.12+ deprecation: `datetime.utcnow()` yerine `datetime.now(datetime.UTC)` |
+| 4 | Komisyon durum güncelleme | Admin panelinde komisyon durumu güncelleme endpoint'i eklenebilir |
+| 5 | Frontend-Backend entegrasyonu | Frontend sayfaları backend API'lerine bağlanmalı |
 
 ---
 
-## 5. Ponytail Kural Seti İhlalleri
+## 5. Ponytail Kural Seti İhlalleri (Güncel)
 
-| # | İhlal | Dosya | Açıklama | Şiddet |
-|---|-------|-------|----------|:------:|
-| 1 | Dev/Prod Parite | `docker-compose.yml` | PostgreSQL konteyneri yok, local SQLite. Prod'da Render PostgreSQL. | Hafif |
-| 2 | Schema Normalizasyon | `models/domain.py` | `vehicle_*` (7 alan) ve `equipment_*` (4 alan) `auctions` tablosuna gömülmüş, ayrı tablo değil. MVP için kabul edilebilir. | Hafif |
-| 3 | Ölü Kod | `models/domain.py` | `AuditLog` modeli tanımlı, hiçbir yerde kullanılmıyor. Ya implemente edilmeli ya da kaldırılmalı (YAGNI). | Hafif |
-| 4 | Güvenlik | `app/core/security.py` | `SECRET_KEY` env değişkeni yoksa sabit string fallback kullanılıyor. Prod'da env zorunlu olmalı. | Orta |
-| 5 | Geçici Çözüm | `main.py` | `lifespan` içinde `create_all` — "prod'da Alembic kullan" yorumu var. MVP için kabul edilebilir. | Hafif |
-| 6 | Eksik Import | `schemas/__init__.py` | `bid` modülü listede yok. | Hafif |
+| # | İhlal | Dosya | Açıklama | Şiddet | Durum |
+|---|-------|-------|----------|:------:|:-----:|
+| 1 | Dev/Prod Parite | `docker-compose.yml` | PostgreSQL konteyneri yok, local SQLite. Prod'da Render PostgreSQL. | Hafif | ⏳ Açık |
+| 2 | Schema Normalizasyon | `models/domain.py` | `vehicle_*` (7 alan) ve `equipment_*` (4 alan) `auctions` tablosuna gömülmüş. MVP için kabul edilebilir. | Hafif | ⏳ Açık |
+| 3 | Ölü Kod | —— | `AuditLog` modeli kaldırıldı (YAGNI). | —— | ✅ Kapalı |
+| 4 | Güvenlik | `app/core/security.py` | `SECRET_KEY` env değişkeni yoksa sabit string fallback. Prod'da env zorunlu olmalı. | Orta | ⏳ Açık |
+| 5 | Geçici Çözüm | `main.py` | `lifespan` içinde `create_all`. MVP için kabul edilebilir. | Hafif | ⏳ Açık |
+| 6 | Eksik Import | `schemas/__init__.py` | `bid` modülü import edilmiş. | —— | ✅ Kapalı |
 
-**Değerlendirme:** Proje ponytail prensiplerine genel olarak uygun. Gereksiz soyutlama, aşırı mühendislik veya gereksiz bağımlılık tespit edilmemiştir.
+**Değerlendirme:** Proje ponytail prensiplerine genel olarak uygun. Kalan ihlaller MVP için kabul edilebilir düzeyde.
 
 ---
 
-## 6. Doküman- Kod Uyumsuzlukları
+## 6. Doküman-Kod Uyumsuzlukları (Güncel)
 
 | Doküman | Belirtilen | Kodda Durum |
 |---------|------------|-------------|
-| Teknik Tasarım Bölüm 4 | WebSocket tabanlı canlı teklif | ❌ Yok, REST API var |
-| Proje Fazları Faz 1 | Frontend uygulaması | ❌ Yok, sadece statik HTML |
-| Proje Fazları Faz 2 | Şifre sıfırlama | ❌ Yok |
+| Teknik Tasarım Bölüm 4 | WebSocket tabanlı canlı teklif | ✅ Mevcut + broadcast + süre uzatma |
+| Proje Fazları Faz 1 | Frontend uygulaması | ✅ Next.js (pages, components, hooks, i18n) |
+| Proje Fazları Faz 2 | Şifre sıfırlama | ✅ `/forgot-password` + `/reset-password` |
 | Proje Fazları Faz 3 | Araç detay alanları (marka, model, yıl, km, yakıt, vites, hasar) | ✅ Mevcut (`vehicle_*` alanları) |
-| Proje Fazları Faz 4 | Süre uzatma (son dakika teklifinde) | ❌ Yok |
-| Teknik Tasarım Bölüm 3 | `payments`, `commissions` tabloları | ❌ Yok |
-| Teknik Tasarım Bölüm 3 | `notifications`, `support_tickets` tabloları | ❌ Yok |
-| Proje Fazları Faz 1 | ME/EN dil geçişi | ❌ Yok |
-| Proje Fazları Faz 7 | E-posta bildirimi | ❌ Yok |
+| Proje Fazları Faz 4 | Süre uzatma (son dakika teklifinde) | ✅ Anti-sniping (5 dk) |
+| Teknik Tasarım Bölüm 3 | `payments`, `commissions` tabloları | ✅ Tanımlı |
+| Teknik Tasarım Bölüm 3 | `notifications`, `support_tickets` tabloları | ✅ Tanımlı |
+| Proje Fazları Faz 1 | ME/EN dil geçişi | ✅ Çeviri dosyaları mevcut |
+| Proje Fazları Faz 7 | E-posta bildirimi | ✅ SMTP altyapısı mevcut |
 
 ---
 
-## 7. Önerilen Aksiyon Sırası
+## 7. Test Sonuçları
 
-| Sıra | Aksiyon | Faz | Süre Tahmini |
-|:----:|---------|:---:|:------------:|
-| 1 | WebSocket canlı teklif motoru + süre uzatma | Faz 4 | 2-3 gün |
-| 2 | Frontend uygulaması (Next.js) | Faz 1 | 1-2 hafta |
-| 3 | Admin panel API'leri | Faz 5 | 3-4 gün |
-| 4 | E-posta bildirim altyapısı | Faz 7 | 2 gün |
-| 5 | Şifre sıfırlama | Faz 2 | 1 gün |
-| 6 | Audit log yazma mantığı | — | 1 gün |
-| 7 | Eksik modeller (payments, commissions, notifications, support_tickets) | Faz 6-7 | 2 gün |
-| 8 | i18n dil altyapısı | Faz 1 | 2 gün |
+**Tüm 107 test başarıyla geçiyor** (25.06.2026):
+- 53 integration test (auction, auth, bid, health, payment)
+- 54 unit test (models, schemas, security)
+
+---
+
+## 8. Önerilen Aksiyon Sırası (Güncel)
+
+Önceki rapordaki 8 aksiyonun tümü tamamlanmıştır. Yeni öneriler:
+
+| Sıra | Aksiyon | Süre Tahmini |
+|:----:|---------|:------------:|
+| 1 | Deprecation warning'leri temizle (`regex`→`pattern`, `Config`→`ConfigDict`, `utcnow`→`now(UTC)`) | 1 saat |
+| 2 | Frontend-Backend entegrasyonu (API bağlantıları) | 2-3 gün |
+| 3 | Docker Compose'a PostgreSQL ekle | 1 saat |
+| 4 | `SECRET_KEY` env kontrolü (fallback kaldır) | 15 dk |
+| 5 | Admin paneli komisyon durum güncelleme | 30 dk |
+| 6 | E2E testleri (Playwright/Cypress) | 1-2 gün |

@@ -163,6 +163,8 @@ class NotificationType(str, enum.Enum):
     auction_lost = "auction_lost"
     auction_ending_soon = "auction_ending_soon"
     payment_received = "payment_received"
+    auction_approved = "auction_approved"
+    auction_rejected = "auction_rejected"
 
 
 class Notification(Base):
@@ -185,7 +187,7 @@ class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
     subject = Column(String, nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String, default="open")  # open, in_progress, resolved, closed

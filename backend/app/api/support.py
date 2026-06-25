@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
@@ -90,3 +90,62 @@ async def my_tickets(
         )
         for t in tickets
     ]
+
+
+# ========== ADMIN: List all tickets ==========
+@support_router.get("/tickets", response_model=list[SupportTicketResponse])
+async def admin_list_tickets(
+    status_filter: str | None = Query(None, description="Filter by status (open, in_progress, resolved, closed)"),
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all support tickets with optional status filter. Admin only."""
+    query = select(SupportTicket).order_by(desc(SupportTicket.created_at))
+    if status_filter:
+        query = query.where(SupportTicket.status == status_filter)
+
+    result = await db.execute(query)
+    tickets = result.scalars().all()
+    return [
+        SupportTicketResponse(
+            id=t.id,
+            user_id=t.user_id,
+            subject=t.subject,
+            message=t.message,
+            status=t.status,
+            created_at=str(t.created_at) if t.created_at else "",
+            updated_at=str(t.updated_at) if t.updated_at else "",
+        )
+        for t in tickets
+    ]
+
+
+# ========== ADMIN: Update ticket status ==========
+@support_router.put("/tickets/{ticket_id}", response_model=SupportTicketResponse)
+async def admin_update_ticket(
+    ticket_id: str,
+    req: SupportTicketUpdateRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update support ticket status. Admin only."""
+    result = await db.execute(
+        select(SupportTicket).where(SupportTicket.id == ticket_id)
+    )
+    ticket = result.scalars().first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket.status = req.status
+    await db.commit()
+    await db.refresh(ticket)
+
+    return SupportTicketResponse(
+        id=ticket.id,
+        user_id=ticket.user_id,
+        subject=ticket.subject,
+        message=ticket.message,
+        status=ticket.status,
+        created_at=str(ticket.created_at) if ticket.created_at else "",
+        updated_at=str(ticket.updated_at) if ticket.updated_at else "",
+    )

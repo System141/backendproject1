@@ -2,12 +2,13 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, asc
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_seller, get_current_admin
-from app.models.domain import Auction, AuctionStatus, AuctionImage, Category, User, UserRole
+from app.models.domain import Auction, AuctionStatus, AuctionImage, Category, User, UserRole, NotificationType
+from app.services.notifications import send_notification
 from app.schemas.auction import (
     AuctionCreateRequest,
     AuctionUpdateRequest,
@@ -123,6 +124,7 @@ async def list_auctions(
     status: str | None = Query(None, description="Filter by status (active, pending_approval, completed, cancelled)"),
     search: str | None = Query(None, min_length=2, description="Search in title/description"),
     seller_id: str | None = Query(None, description="Filter by seller"),
+    winner_user_id: str | None = Query(None, description="Filter by winner"),
     sort_by: str = Query("created_at", regex=r"^(created_at|end_time|start_price|current_price)$"),
     sort_dir: str = Query("desc", regex=r"^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100),
@@ -146,10 +148,12 @@ async def list_auctions(
         )
     if seller_id:
         query = query.where(Auction.seller_id == seller_id)
+    if winner_user_id:
+        query = query.where(Auction.winner_user_id == winner_user_id)
 
     # Sorting
     sort_col = getattr(Auction, sort_by)
-    order_fn = desc if sort_dir == "desc" else type(lambda c: c)
+    order_fn = desc if sort_dir == "desc" else asc
     query = query.order_by(order_fn(sort_col))
 
     query = query.offset(offset).limit(limit)
@@ -270,6 +274,16 @@ async def approve_auction(
     await db.commit()
     await db.refresh(auction)
 
+    # Notify seller
+    await send_notification(
+        db, auction.seller_id,
+        NotificationType.auction_approved,
+        f"Auction approved: {auction.title}",
+        f"Your auction '{auction.title}' has been approved and is now live.",
+        auction_id=auction_id,
+        send_email=True,
+    )
+
     return _build_auction_response(auction)
 
 
@@ -289,5 +303,15 @@ async def reject_auction(
     auction.status = AuctionStatus.cancelled
     await db.commit()
     await db.refresh(auction)
+
+    # Notify seller
+    await send_notification(
+        db, auction.seller_id,
+        NotificationType.auction_rejected,
+        f"Auction rejected: {auction.title}",
+        f"Your auction '{auction.title}' has been rejected by the admin.",
+        auction_id=auction_id,
+        send_email=True,
+    )
 
     return _build_auction_response(auction)

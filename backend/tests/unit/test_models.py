@@ -1,6 +1,6 @@
 """Unit tests for SQLAlchemy model definitions."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 import pytest
 from sqlalchemy import select
@@ -158,8 +158,8 @@ class TestAuctionModel:
             start_price=100.0,
             current_price=100.0,
             min_increment=10.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(dt_timezone.utc),
+            end_time=datetime.now(dt_timezone.utc),
         )
         db_session.add(auction)
         await db_session.commit()
@@ -186,8 +186,8 @@ class TestBidModel:
             start_price=50.0,
             current_price=50.0,
             min_increment=5.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(dt_timezone.utc),
+            end_time=datetime.now(dt_timezone.utc),
         )
         db_session.add(auction)
         await db_session.commit()
@@ -224,8 +224,8 @@ class TestAuctionImageModel:
             start_price=10.0,
             current_price=10.0,
             min_increment=1.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(dt_timezone.utc),
+            end_time=datetime.now(dt_timezone.utc),
         )
         db_session.add(auction)
         await db_session.commit()

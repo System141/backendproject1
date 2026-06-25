@@ -1,6 +1,6 @@
 """Integration tests for the auction API endpoints."""
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -21,7 +21,7 @@ class TestCreateAuction:
             "category_id": test_category.id,
             "start_price": 5000.0,
             "min_increment": 100.0,
-            "end_time": (datetime.utcnow() + timedelta(days=7)).isoformat(),
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
             "brand": "Toyota",
             "model": "Corolla",
             "year": 2020,
@@ -50,7 +50,7 @@ class TestCreateAuction:
             "category_id": test_category.id,
             "start_price": 100.0,
             "min_increment": 10.0,
-            "end_time": (datetime.utcnow() + timedelta(days=3)).isoformat(),
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
         }
         response = await async_client.post("/api/auctions", json=payload, headers=auth_headers)
         assert response.status_code == 403
@@ -65,7 +65,7 @@ class TestCreateAuction:
             "category_id": 99999,
             "start_price": 100.0,
             "min_increment": 10.0,
-            "end_time": (datetime.utcnow() + timedelta(days=3)).isoformat(),
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
         }
         response = await async_client.post("/api/auctions", json=payload, headers=seller_headers)
         assert response.status_code == 404
@@ -80,7 +80,7 @@ class TestCreateAuction:
             "category_id": test_category.id,
             "start_price": 100.0,
             "min_increment": 10.0,
-            "end_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+            "end_time": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         }
         response = await async_client.post("/api/auctions", json=payload, headers=seller_headers)
         assert response.status_code == 400
@@ -102,8 +102,8 @@ class TestListAuctions:
             start_price=100.0,
             current_price=100.0,
             min_increment=10.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=3),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=3),
             status=AuctionStatus.pending_approval,
         )
         # Create an active auction (should be visible)
@@ -116,8 +116,8 @@ class TestListAuctions:
             start_price=200.0,
             current_price=200.0,
             min_increment=20.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=3),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=3),
             status=AuctionStatus.active,
         )
         db_session.add_all([pending, active])
@@ -145,8 +145,8 @@ class TestAuctionDetail:
             start_price=300.0,
             current_price=300.0,
             min_increment=30.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=5),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=5),
             status=AuctionStatus.active,
         )
         db_session.add(auction)
@@ -179,8 +179,8 @@ class TestApproveReject:
             start_price=500.0,
             current_price=500.0,
             min_increment=50.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=7),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=7),
             status=AuctionStatus.pending_approval,
         )
         db_session.add(auction)
@@ -203,8 +203,8 @@ class TestApproveReject:
             start_price=500.0,
             current_price=500.0,
             min_increment=50.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=7),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=7),
             status=AuctionStatus.pending_approval,
         )
         db_session.add(auction)
@@ -227,8 +227,8 @@ class TestApproveReject:
             start_price=500.0,
             current_price=500.0,
             min_increment=50.0,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(days=7),
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=7),
             status=AuctionStatus.pending_approval,
         )
         db_session.add(auction)
@@ -253,9 +253,9 @@ class TestMyAuctions:
                 start_price=100.0 * (i + 1),
                 current_price=100.0 * (i + 1),
                 min_increment=10.0,
-                start_time=datetime.utcnow(),
-                end_time=datetime.utcnow() + timedelta(days=7),
-                status=AuctionStatus.active,
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=7),
+            status=AuctionStatus.active,
             )
             db_session.add(auction)
         await db_session.commit()

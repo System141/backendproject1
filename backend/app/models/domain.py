@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text
 from sqlalchemy.orm import relationship
 import enum
@@ -25,6 +25,10 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -40,8 +44,8 @@ class User(Base):
     marketing_consent = Column(Boolean, default=False, nullable=False)
     reset_token_hash = Column(String, nullable=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Category(Base):
@@ -69,7 +73,7 @@ class Auction(Base):
     end_time = Column(DateTime, nullable=False)
     status = Column(Enum(AuctionStatus), default=AuctionStatus.pending_approval)
     winner_user_id = Column(String, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Vehicle-specific fields (nullable)
     brand = Column(String, nullable=True)
@@ -101,7 +105,7 @@ class Bid(Base):
     auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     amount = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     ip_address = Column(String)
 
     auction = relationship("Auction", backref="bids")
@@ -134,8 +138,8 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
     stripe_session_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     auction = relationship("Auction")
     buyer = relationship("User", foreign_keys=[buyer_id])
@@ -150,7 +154,7 @@ class Commission(Base):
     amount = Column(Float, nullable=False)
     rate = Column(Float, nullable=False)  # e.g. 0.05 for 5%
     status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     auction = relationship("Auction")
     seller = relationship("User", foreign_keys=[seller_id])
@@ -177,7 +181,7 @@ class Notification(Base):
     message = Column(Text, nullable=False)
     auction_id = Column(String, ForeignKey("auctions.id"), nullable=True)
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     user = relationship("User")
     auction = relationship("Auction")
@@ -191,8 +195,7 @@ class SupportTicket(Base):
     subject = Column(String, nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String, default="open")  # open, in_progress, resolved, closed
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User")
-

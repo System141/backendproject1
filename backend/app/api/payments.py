@@ -92,7 +92,7 @@ async def my_payments(
 @payments_router.put("/{payment_id}/status", response_model=PaymentResponse)
 async def update_payment_status(
     payment_id: str,
-    new_status: str = Query(..., regex=r"^(completed|failed|refunded)$"),
+    new_status: str = Query(..., pattern=r"^(completed|failed|refunded)$"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):

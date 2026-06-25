@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -59,8 +59,7 @@ class AuctionImageResponse(BaseModel):
     image_url: str
     sort_order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- Response ----------
@@ -94,8 +93,7 @@ class AuctionResponse(BaseModel):
     condition: Optional[str] = None
     location: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- Detail (with images + category info) ----------
@@ -104,8 +102,7 @@ class CategoryBrief(BaseModel):
     name: str
     slug: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuctionDetailResponse(AuctionResponse):

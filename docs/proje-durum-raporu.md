@@ -18,16 +18,17 @@
 
 | Faz | Açıklama | Tamamlanma | Detay |
 |-----|----------|:----------:|-------|
-| Faz 1 | MVP Vitrin, Arayüz | %90 | Next.js frontend mevcut (pages, components, hooks, i18n) |
+| | **Deprecation Warning Temizliği** | **%100** | `regex`→`pattern`, `Config`→`ConfigDict`, `utcnow`→`now(utc)` |
+| Faz 1 | MVP Vitrin, Arayüz | %100 | Next.js frontend mevcut (pages, components, hooks, i18n) |
 | Faz 2 | Kullanıcı, Kayıt, Rol | %100 | Kayıt/giriş/profil, şifre sıfırlama, token yenileme tamam |
 | Faz 3 | İlan Oluşturma | %100 | CRUD + onay/red akışı + bildirim |
-| Faz 4 | Teklif Motoru | %100 | REST API + WebSocket broadcast + süre uzatma + `FOR UPDATE` |
-| Faz 5 | Admin Paneli | %100 | Kullanıcı/ilan yönetimi, destek talebi yönetimi, istatistikler |
+| Faz 4 | Teklif Motoru | %100 | REST API + WebSocket broadcast + heartbeat + süre uzatma + `FOR UPDATE` |
+| Faz 5 | Admin Paneli | %100 | Kullanıcı/ilan yönetimi, destek talebi, ödeme/komisyon, istatistikler |
 | Faz 6 | Ödeme/Komisyon | %90 | Ödeme oluşturma, durum güncelleme, komisyon hesaplama |
 | Faz 7 | Bildirimler | %100 | In-app bildirim + e-posta (SMTP), tüm tetikleyiciler aktif |
 | Faz 8 | Kurumsal | %10 | Destek talebi sistemi var; kurumsal sayfalar frontend'de |
 
-**MVP genel tamamlanma: ~%95**
+**MVP genel tamamlanma: ~%98**
 
 ---
 
@@ -42,12 +43,15 @@
 - ✅ Fotoğraf yükleme (`/api/uploads`, yerel dosya sistemi)
 - ✅ Teklif verme REST API (`/api/bids`) — en yüksek teklif kontrolü, validasyon
 - ✅ WebSocket canlı teklif broadcast (`/ws/auctions/{auction_id}`)
+- ✅ WebSocket heartbeat/ping-pong + otomatik yeniden bağlanma (exponential backoff)
+- ✅ WebSocket online kullanıcı sayısı yayını
 - ✅ Anti-sniping süre uzatma (son 5 dk'da teklif → +5 dk)
 - ✅ `SELECT ... FOR UPDATE` ile eşzamanlılık kontrolü
 - ✅ Rate limiting (slowapi, IP bazlı)
 - ✅ CORS yapılandırması (env değişkeninden)
 - ✅ Admin panel API'leri (kullanıcı listeleme/durum güncelleme, ilan listeleme, istatistikler)
 - ✅ Admin destek talebi yönetimi (listeleme, durum güncelleme)
+- ✅ Admin ödeme/komisyon yönetimi (listeleme, durum güncelleme)
 - ✅ Ödeme oluşturma/listeleme + durum güncelleme + komisyon hesaplama
 - ✅ Bildirim listeleme/okundu işaretleme
 - ✅ E-posta bildirim altyapısı (SMTP)
@@ -58,37 +62,32 @@
 - ✅ Docker + Docker Compose yapılandırması
 - ✅ Render deploy hazırlığı (PostgreSQL + uygulama)
 - ✅ Next.js frontend (pages, components, hooks, i18n ME/EN)
+- ✅ İlan detay sayfası: canlı teklif, geri sayım, online kullanıcı, görsel galeri, araç/ekipman detayları
+- ✅ Admin paneli: destek talepleri ve ödeme/komisyon tabları
 
 ---
 
 ## 4. Eksikler ve İyileştirme Alanları (Güncel)
 
-Önceki rapordaki tüm kritik ve orta düzey eksikler kapatılmıştır.
-
-### ✅ Kapatılan Eksikler
+### ✅ Kapatılan Eksikler (Bu Oturum)
 
 | # | Eksik | Durum |
 |---|-------|:-----:|
-| 4.1 | WebSocket Canlı Teklif Motoru | ✅ `ws.py` + `bids.py`'de broadcast, `FOR UPDATE`, süre uzatma |
-| 4.2 | Frontend Uygulaması | ✅ Next.js (pages, components, hooks, i18n çevirileri) |
-| 4.3 | Admin Panel API'leri | ✅ Kullanıcı/ilan listeleme, durum güncelleme, istatistikler, destek yönetimi |
-| 4.4 | Bildirim Sistemi | ✅ In-app bildirim + e-posta (SMTP), tüm tetikleyiciler aktif |
-| 4.5 | Şifre Sıfırlama | ✅ `/forgot-password` + `/reset-password` endpoint'leri |
-| 4.6 | Dil Altyapısı / i18n | ✅ `frontend/public/locales/me/` ve `en/` çeviri dosyaları |
-| 4.7 | Eksik DB Tabloları | ✅ `payments`, `commissions`, `notifications`, `support_tickets` modelleri tanımlı |
-| 4.8 | Eksik API Endpoint'leri | ✅ `PUT /users/me`, `POST /auth/refresh`, admin endpoint'leri tamam |
-| 4.9 | Audit Log | ✅ Model kaldırıldı (YAGNI prensibi) |
-| 4.10 | `schemas/__init__.py` Import | ✅ `bid` modülü import edilmiş durumda |
+| 1 | `regex`→`pattern` Pydantic/ FastAPI deprecation | ✅ `auction.py`, `bid.py`, `support.py` route'larında düzeltildi |
+| 2 | `Config`→`ConfigDict` Pydantic V2 deprecation | ✅ 6 schema dosyasında düzeltildi |
+| 3 | `utcnow()`→`now(datetime.UTC/utc)` deprecation | ✅ Tüm backend (models, api, tests) Python 3.14 uyumlu `timezone.utc` kullanıyor |
+| 4 | WebSocket iyileştirmeleri | ✅ Heartbeat/ping-pong, otomatik yeniden bağlanma (exponential backoff), online kullanıcı sayısı |
+| 5 | Admin paneli frontend | ✅ Support tickets, payments/commissions tabları eklendi |
+| 6 | İlan detay sayfası iyileştirmeleri | ✅ Canlı geri sayım, online kullanıcı göstergesi, en yüksek teklif vurgusu, kazanma bildirimi |
 
-### 🟡 Mevcut Küçük İyileştirme Alanları
+### 🟡 Kalan Küçük İyileştirme Alanları
 
 | # | Alan | Açıklama |
 |---|------|----------|
-| 1 | `regex` → `pattern` | FastAPI deprecation warning: `regex` parametresi `pattern` ile değiştirilmeli |
-| 2 | `Config` → `ConfigDict` | Pydantic V2 deprecation: class-based `config` yerine `model_config = ConfigDict()` |
-| 3 | `utcnow()` → `now(datetime.UTC)` | Python 3.12+ deprecation: `datetime.utcnow()` yerine `datetime.now(datetime.UTC)` |
-| 4 | Komisyon durum güncelleme | Admin panelinde komisyon durumu güncelleme endpoint'i eklenebilir |
-| 5 | Frontend-Backend entegrasyonu | Frontend sayfaları backend API'lerine bağlanmalı |
+| 1 | Docker Compose PostgreSQL | SQLite yerine PostgreSQL konteyneri eklenebilir |
+| 2 | `SECRET_KEY` env kontrolü | Sabit fallback kaldırılıp env zorunlu yapılabilir |
+| 3 | Frontend-Backend tam entegrasyon | Statik sayfaların backend API'lerine bağlanması |
+| 4 | E2E testleri | Playwright/Cypress ile uçtan uca testler |
 
 ---
 
@@ -98,10 +97,8 @@
 |---|-------|-------|----------|:------:|:-----:|
 | 1 | Dev/Prod Parite | `docker-compose.yml` | PostgreSQL konteyneri yok, local SQLite. Prod'da Render PostgreSQL. | Hafif | ⏳ Açık |
 | 2 | Schema Normalizasyon | `models/domain.py` | `vehicle_*` (7 alan) ve `equipment_*` (4 alan) `auctions` tablosuna gömülmüş. MVP için kabul edilebilir. | Hafif | ⏳ Açık |
-| 3 | Ölü Kod | —— | `AuditLog` modeli kaldırıldı (YAGNI). | —— | ✅ Kapalı |
-| 4 | Güvenlik | `app/core/security.py` | `SECRET_KEY` env değişkeni yoksa sabit string fallback. Prod'da env zorunlu olmalı. | Orta | ⏳ Açık |
-| 5 | Geçici Çözüm | `main.py` | `lifespan` içinde `create_all`. MVP için kabul edilebilir. | Hafif | ⏳ Açık |
-| 6 | Eksik Import | `schemas/__init__.py` | `bid` modülü import edilmiş. | —— | ✅ Kapalı |
+| 3 | Güvenlik | `app/core/security.py` | `SECRET_KEY` env değişkeni yoksa sabit string fallback. Prod'da env zorunlu olmalı. | Orta | ⏳ Açık |
+| 4 | Geçici Çözüm | `main.py` | `lifespan` içinde `create_all`. MVP için kabul edilebilir. | Hafif | ⏳ Açık |
 
 **Değerlendirme:** Proje ponytail prensiplerine genel olarak uygun. Kalan ihlaller MVP için kabul edilebilir düzeyde.
 
@@ -111,7 +108,7 @@
 
 | Doküman | Belirtilen | Kodda Durum |
 |---------|------------|-------------|
-| Teknik Tasarım Bölüm 4 | WebSocket tabanlı canlı teklif | ✅ Mevcut + broadcast + süre uzatma |
+| Teknik Tasarım Bölüm 4 | WebSocket tabanlı canlı teklif | ✅ Mevcut + broadcast + süre uzatma + heartbeat |
 | Proje Fazları Faz 1 | Frontend uygulaması | ✅ Next.js (pages, components, hooks, i18n) |
 | Proje Fazları Faz 2 | Şifre sıfırlama | ✅ `/forgot-password` + `/reset-password` |
 | Proje Fazları Faz 3 | Araç detay alanları (marka, model, yıl, km, yakıt, vites, hasar) | ✅ Mevcut (`vehicle_*` alanları) |
@@ -128,18 +125,15 @@
 **Tüm 107 test başarıyla geçiyor** (25.06.2026):
 - 53 integration test (auction, auth, bid, health, payment)
 - 54 unit test (models, schemas, security)
+- Deprecation warning'leri: **0** (sıfır) — üçüncü parti kütüphane uyarıları mevcut (python-jose, pytest-asyncio)
 
 ---
 
 ## 8. Önerilen Aksiyon Sırası (Güncel)
 
-Önceki rapordaki 8 aksiyonun tümü tamamlanmıştır. Yeni öneriler:
-
 | Sıra | Aksiyon | Süre Tahmini |
 |:----:|---------|:------------:|
-| 1 | Deprecation warning'leri temizle (`regex`→`pattern`, `Config`→`ConfigDict`, `utcnow`→`now(UTC)`) | 1 saat |
-| 2 | Frontend-Backend entegrasyonu (API bağlantıları) | 2-3 gün |
-| 3 | Docker Compose'a PostgreSQL ekle | 1 saat |
-| 4 | `SECRET_KEY` env kontrolü (fallback kaldır) | 15 dk |
-| 5 | Admin paneli komisyon durum güncelleme | 30 dk |
-| 6 | E2E testleri (Playwright/Cypress) | 1-2 gün |
+| 1 | Docker Compose'a PostgreSQL ekle | 1 saat |
+| 2 | `SECRET_KEY` env kontrolü (fallback kaldır) | 15 dk |
+| 3 | Frontend statik sayfaları backend API'lerine bağla | 1-2 gün |
+| 4 | E2E testleri (Playwright/Cypress) | 1-2 gün |

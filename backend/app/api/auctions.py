@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, asc
@@ -80,11 +80,11 @@ async def create_auction(
         raise HTTPException(status_code=404, detail="Category not found")
 
     # Validate end_time is in the future
-    if req.end_time <= datetime.utcnow():
+    if req.end_time <= datetime.now(dt_timezone.utc):
         raise HTTPException(status_code=400, detail="End time must be in the future")
 
     auction_id = str(uuid.uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(dt_timezone.utc)
 
     auction = Auction(
         id=auction_id,
@@ -125,8 +125,8 @@ async def list_auctions(
     search: str | None = Query(None, min_length=2, description="Search in title/description"),
     seller_id: str | None = Query(None, description="Filter by seller"),
     winner_user_id: str | None = Query(None, description="Filter by winner"),
-    sort_by: str = Query("created_at", regex=r"^(created_at|end_time|start_price|current_price)$"),
-    sort_dir: str = Query("desc", regex=r"^(asc|desc)$"),
+    sort_by: str = Query("created_at", pattern=r"^(created_at|end_time|start_price|current_price)$"),
+    sort_dir: str = Query("desc", pattern=r"^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),

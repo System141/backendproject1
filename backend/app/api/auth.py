@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -170,7 +170,7 @@ async def forgot_password(request: Request, req: PasswordResetRequest, db: Async
     # Generate reset token (valid 1 hour)
     reset_token = str(uuid.uuid4())
     user.reset_token_hash = reset_token  # In production, hash this
-    user.reset_token_expires_at = datetime.utcnow() + timedelta(hours=1)
+    user.reset_token_expires_at = datetime.now(dt_timezone.utc) + timedelta(hours=1)
     await db.commit()
 
     # In demo/dev mode, return the token directly so the reset form can be tested
@@ -188,7 +188,7 @@ async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncS
     result = await db.execute(
         select(User).where(
             User.reset_token_hash == req.token,
-            User.reset_token_expires_at > datetime.utcnow(),
+            User.reset_token_expires_at > datetime.now(dt_timezone.utc),
         )
     )
     user = result.scalars().first()

@@ -49,7 +49,7 @@ async def admin_list_users(
 @admin_router.put("/users/{user_id}/status", response_model=UserResponse)
 async def admin_update_user_status(
     user_id: str,
-    new_status: str = Query(..., regex=r"^(active|banned|suspended)$"),
+    new_status: str = Query(..., pattern=r"^(active|banned|suspended)$"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):

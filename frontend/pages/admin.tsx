@@ -12,8 +12,9 @@ export default function Admin() {
   const { t } = useTranslation();
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'users' | 'stats'>('users');
+  const [tab, setTab] = useState<'users' | 'auctions' | 'stats'>('users');
   const [users, setUsers] = useState<User[]>([]);
+  const [auctions, setAuctions] = useState<any[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [filterRole, setFilterRole] = useState('');
 
@@ -23,12 +24,23 @@ export default function Admin() {
       const params = filterRole ? `?role=${filterRole}` : '';
       api.get<User[]>(`/api/admin/users${params}`).then(setUsers).catch(console.error);
       api.get<Stats>('/api/admin/stats').then(setStats).catch(console.error);
+      api.get<any[]>('/api/admin/auctions?status=pending_approval').then(setAuctions).catch(console.error);
     }
   }, [user, loading, filterRole, router]);
 
   const updateStatus = async (userId: string, newStatus: string) => {
     await api.put(`/api/admin/users/${userId}/status?new_status=${newStatus}`, {});
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+  };
+
+  const approveAuction = async (id: string) => {
+    await api.post(`/api/auctions/${id}/approve`, {});
+    setAuctions(prev => prev.filter(a => a.id !== id));
+  };
+
+  const rejectAuction = async (id: string) => {
+    await api.post(`/api/auctions/${id}/reject`, {});
+    setAuctions(prev => prev.filter(a => a.id !== id));
   };
 
   if (loading || !user) return <Layout><p>{t('loading')}</p></Layout>;
@@ -38,6 +50,7 @@ export default function Admin() {
       <h1 className="text-2xl font-bold mb-6">{t('nav_admin')}</h1>
       <div className="flex gap-4 mb-6">
         <button onClick={() => setTab('users')} className={`px-4 py-2 rounded ${tab === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>{t('admin_users')}</button>
+        <button onClick={() => setTab('auctions')} className={`px-4 py-2 rounded ${tab === 'auctions' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>Pending Auctions ({auctions.length})</button>
         <button onClick={() => setTab('stats')} className={`px-4 py-2 rounded ${tab === 'stats' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>{t('admin_stats')}</button>
       </div>
 
@@ -71,6 +84,34 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {tab === 'auctions' && (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr><th className="p-3 text-left">Title</th><th className="p-3 text-left">Start Price</th><th className="p-3 text-left">Date</th><th className="p-3 text-left">Actions</th></tr>
+            </thead>
+            <tbody>
+              {auctions.map(a => (
+                <tr key={a.id} className="border-t">
+                  <td className="p-3">
+                    <a href={`/auctions/${a.id}`} className="text-blue-600 hover:underline" target="_blank">{a.title}</a>
+                  </td>
+                  <td className="p-3">${a.start_price}</td>
+                  <td className="p-3">{new Date(a.created_at).toLocaleDateString()}</td>
+                  <td className="p-3 space-x-2">
+                    <button onClick={() => approveAuction(a.id)} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Approve</button>
+                    <button onClick={() => rejectAuction(a.id)} className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">Reject</button>
+                  </td>
+                </tr>
+              ))}
+              {auctions.length === 0 && (
+                <tr><td colSpan={4} className="p-6 text-center text-gray-500">No pending auctions.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 

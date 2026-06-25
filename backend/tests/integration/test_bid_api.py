@@ -386,6 +386,7 @@ class TestFinalizeAuction:
         async_client: AsyncClient,
         db_session: AsyncSession,
         seller_user: User,
+        seller_headers: dict,
         test_category: Category,
     ):
         """POST /api/auctions/{id}/finalize should set winner from highest bid."""
@@ -432,7 +433,10 @@ class TestFinalizeAuction:
         db_session.add(bid)
         await db_session.commit()
 
-        response = await async_client.post(f"/api/auctions/{auction.id}/finalize")
+        response = await async_client.post(
+            f"/api/auctions/{auction.id}/finalize",
+            headers=seller_headers,
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "completed"
@@ -450,6 +454,7 @@ class TestFinalizeAuction:
         async_client: AsyncClient,
         db_session: AsyncSession,
         seller_user: User,
+        seller_headers: dict,
         test_category: Category,
     ):
         """Auction with no bids should complete with no winner."""
@@ -469,7 +474,10 @@ class TestFinalizeAuction:
         db_session.add(auction)
         await db_session.commit()
 
-        response = await async_client.post(f"/api/auctions/{auction.id}/finalize")
+        response = await async_client.post(
+            f"/api/auctions/{auction.id}/finalize",
+            headers=seller_headers,
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "completed"
@@ -481,6 +489,7 @@ class TestFinalizeAuction:
         async_client: AsyncClient,
         db_session: AsyncSession,
         seller_user: User,
+        seller_headers: dict,
         test_category: Category,
     ):
         """Auction that hasn't ended yet should not be finalizable."""
@@ -500,9 +509,43 @@ class TestFinalizeAuction:
         db_session.add(auction)
         await db_session.commit()
 
-        response = await async_client.post(f"/api/auctions/{auction.id}/finalize")
+        response = await async_client.post(
+            f"/api/auctions/{auction.id}/finalize",
+            headers=seller_headers,
+        )
         assert response.status_code == 400
         assert "not ended" in response.json()["detail"].lower()
+
+    async def test_buyer_cannot_finalize(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        seller_user: User,
+        auth_headers: dict,
+        test_category: Category,
+    ):
+        """Only the seller or an admin should be able to finalize."""
+        auction = Auction(
+            id=str(uuid.uuid4()),
+            seller_id=seller_user.id,
+            category_id=test_category.id,
+            title="Unauthorized Finalize",
+            description="Buyer cannot finalize",
+            start_price=100.0,
+            current_price=100.0,
+            min_increment=10.0,
+            start_time=datetime.now(timezone.utc) - timedelta(days=10),
+            end_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            status=AuctionStatus.active,
+        )
+        db_session.add(auction)
+        await db_session.commit()
+
+        response = await async_client.post(
+            f"/api/auctions/{auction.id}/finalize",
+            headers=auth_headers,
+        )
+        assert response.status_code == 403
 
 
 class TestMyBids:

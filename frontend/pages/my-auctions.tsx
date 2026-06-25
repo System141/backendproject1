@@ -17,7 +17,7 @@ export default function MyAuctions() {
   useEffect(() => {
     if (!loading && (!user || (user.role !== 'seller' && user.role !== 'corporate_seller'))) router.push('/');
     if (user) api.get<Auction[]>('/api/auctions/my').then(setAuctions).catch(console.error);
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   if (loading || !user) return <Layout><p>{t('loading')}</p></Layout>;
 

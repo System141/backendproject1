@@ -16,7 +16,7 @@ export default function Profile() {
   useEffect(() => {
     if (!loading && !user) router.push('/login');
     if (user) api.get<Notification[]>('/api/notifications').then(setNotifs).catch(console.error);
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   const markRead = async (id: string) => {
     await api.put(`/api/notifications/${id}/read`, {});

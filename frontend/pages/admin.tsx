@@ -24,7 +24,7 @@ export default function Admin() {
       api.get<User[]>(`/api/admin/users${params}`).then(setUsers).catch(console.error);
       api.get<Stats>('/api/admin/stats').then(setStats).catch(console.error);
     }
-  }, [user, loading, filterRole]);
+  }, [user, loading, filterRole, router]);
 
   const updateStatus = async (userId: string, newStatus: string) => {
     await api.put(`/api/admin/users/${userId}/status?new_status=${newStatus}`, {});

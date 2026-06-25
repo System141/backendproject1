@@ -6,7 +6,7 @@ from sqlalchemy import select, desc
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.domain import Auction, AuctionStatus, Bid, User
+from app.models.domain import Auction, AuctionStatus, Bid, User, UserRole
 from app.schemas.bid import BidCreateRequest, BidResponse, BidHistoryResponse
 from app.api.ws import manager
 from app.services.notifications import send_notification, NotificationType
@@ -25,7 +25,11 @@ async def place_bid(
 ):
     """Place a bid on an active auction. Any authenticated user can bid."""
     # Fetch auction
-    result = await db.execute(select(Auction).where(Auction.id == auction_id))
+    result = await db.execute(
+        select(Auction)
+        .where(Auction.id == auction_id)
+        .with_for_update()
+    )
     auction = result.scalars().first()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
@@ -180,16 +184,24 @@ async def get_bid_history(
 @bids_router.post("/{auction_id}/finalize", response_model=dict)
 async def finalize_auction(
     auction_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Finalize an ended auction: determine the winner (highest bidder)
-    and mark the auction as completed. Anyone can call this endpoint.
+    and mark the auction as completed. Admins and the seller can call this.
     """
-    result = await db.execute(select(Auction).where(Auction.id == auction_id))
+    result = await db.execute(
+        select(Auction)
+        .where(Auction.id == auction_id)
+        .with_for_update()
+    )
     auction = result.scalars().first()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
+
+    if current_user.role != UserRole.admin and auction.seller_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the seller or an admin can finalize this auction")
 
     # Only active auctions can be finalized
     if auction.status != AuctionStatus.active:

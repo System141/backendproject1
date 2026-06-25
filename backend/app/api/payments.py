@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.core.database import get_db
-from app.core.security import get_current_user, get_current_admin
+from app.core.security import get_current_user
 from app.models.domain import Payment, PaymentStatus, User, Auction
 from app.schemas.payment import PaymentCreateRequest, PaymentResponse
 
@@ -25,6 +25,10 @@ async def create_payment(
 
     if auction.status.name != "completed":
         raise HTTPException(status_code=400, detail="Auction is not completed")
+    if not auction.winner_user_id:
+        raise HTTPException(status_code=400, detail="Auction has no winning bidder")
+    if auction.winner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the winning bidder can pay for this auction")
 
     # Check if payment already exists
     existing = await db.execute(
@@ -34,14 +38,13 @@ async def create_payment(
         raise HTTPException(status_code=409, detail="Payment already exists for this auction")
 
     import uuid
-    from datetime import datetime
 
     payment = Payment(
         id=str(uuid.uuid4()),
         auction_id=req.auction_id,
         buyer_id=current_user.id,
         amount=auction.current_price,
-        status=PaymentStatus.completed if req.stripe_session_id else PaymentStatus.pending,
+        status=PaymentStatus.pending,
         stripe_session_id=req.stripe_session_id,
     )
     db.add(payment)

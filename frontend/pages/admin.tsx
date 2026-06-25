@@ -182,7 +182,7 @@ export default function Admin() {
     if (tab === 'bids') fetchBids();
     if (tab === 'categories') fetchCategories();
     if (tab === 'audit') fetchAuditLogs();
-  }, [tab, user, auctionFilterStatus, fetchAllAuctions, fetchTickets, fetchPayments, fetchBids, fetchCategories, fetchAuditLogs]);
+  }, [tab, user, auctionFilterStatus, auctionFilterFeatured, fetchAllAuctions, fetchTickets, fetchPayments, fetchBids, fetchCategories, fetchAuditLogs]);
 
   // ---- Actions ----
   const updateUserStatus = async (userId: string, newStatus: string) => {

@@ -50,6 +50,7 @@ def _build_auction_response(auction: Auction) -> AuctionResponse:
         end_time=auction.end_time,
         status=auction.status.value,
         winner_user_id=auction.winner_user_id,
+        is_featured=bool(auction.is_featured) if hasattr(auction, 'is_featured') else False,
         created_at=auction.created_at,
         brand=auction.brand,
         model=auction.model,

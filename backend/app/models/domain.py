@@ -73,6 +73,7 @@ class Auction(Base):
     end_time = Column(DateTime, nullable=False)
     status = Column(Enum(AuctionStatus), default=AuctionStatus.pending_approval)
     winner_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
 
     # Vehicle-specific fields (nullable)
@@ -197,5 +198,19 @@ class SupportTicket(Base):
     status = Column(String, default="open")  # open, in_progress, resolved, closed
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    user = relationship("User")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    action = Column(String, nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
 
     user = relationship("User")

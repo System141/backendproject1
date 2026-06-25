@@ -76,6 +76,7 @@ class AuctionResponse(BaseModel):
     end_time: datetime
     status: str
     winner_user_id: Optional[str] = None
+    is_featured: bool = False
     created_at: datetime
 
     # Vehicle fields

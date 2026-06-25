@@ -23,7 +23,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const toggleLang = () => {
     const next = i18n.language === 'me' ? 'en' : 'me';
     i18n.changeLanguage(next);
-    router.push(router.pathname, router.asPath, { locale: next });
   };
 
   const navLinks = [

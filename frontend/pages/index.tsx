@@ -3,19 +3,7 @@ import { api } from '@/lib/api';
 import Layout from '@/components/Layout';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-
-interface AuctionImage {
-  id: string;
-  image_url: string;
-  sort_order: number;
-}
-
-interface Auction {
-  id: string; title: string; current_price: number; end_time: string; status: string;
-  start_price: number; category_id: number; brand?: string; model?: string; year?: number;
-  equipment_brand?: string; condition?: string;
-  images?: AuctionImage[];
-}
+import { Auction } from '@/types';
 
 export default function Home() {
   const { t } = useTranslation();

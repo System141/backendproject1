@@ -10,6 +10,31 @@ from app.schemas.support import SupportTicketCreateRequest, SupportTicketUpdateR
 support_router = APIRouter(prefix="/api/support", tags=["support"])
 
 
+@support_router.post("/contact", status_code=status.HTTP_201_CREATED)
+async def contact_form(
+    req: SupportTicketCreateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public contact form — no auth required."""
+    import uuid
+
+    ticket = SupportTicket(
+        id=str(uuid.uuid4()),
+        user_id=None,
+        subject=req.subject,
+        message=req.message,
+        status="open",
+    )
+    db.add(ticket)
+    await db.commit()
+    await db.refresh(ticket)
+
+    return {
+        "ok": True,
+        "message": "Your message has been received. We'll get back to you soon.",
+    }
+
+
 @support_router.post("/tickets", response_model=SupportTicketResponse, status_code=status.HTTP_201_CREATED)
 async def create_ticket(
     req: SupportTicketCreateRequest,

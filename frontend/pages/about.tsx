@@ -19,18 +19,18 @@ export default function AboutPage() {
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
             <div className="text-3xl mb-3">🎯</div>
-            <h3 className="font-bold text-gray-900 mb-2">{t('how_step1_title')}</h3>
-            <p className="text-sm text-gray-600">{t('how_step1_desc')}</p>
+            <h3 className="font-bold text-gray-900 mb-2">{t('about_mission_title')}</h3>
+            <p className="text-sm text-gray-600">{t('about_mission_desc')}</p>
           </div>
           <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
-            <div className="text-3xl mb-3">🛡️</div>
-            <h3 className="font-bold text-gray-900 mb-2">{t('about_title')}</h3>
-            <p className="text-sm text-gray-600">{t('about_desc')}</p>
+            <div className="text-3xl mb-3">🤝</div>
+            <h3 className="font-bold text-gray-900 mb-2">{t('hero_stat3')}</h3>
+            <p className="text-sm text-gray-600">{t('hero_sub')}</p>
           </div>
           <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
             <div className="text-3xl mb-3">🌍</div>
             <h3 className="font-bold text-gray-900 mb-2">{t('hero_stat2')}</h3>
-            <p className="text-sm text-gray-600">{t('hero_sub')}</p>
+            <p className="text-sm text-gray-600">{t('cat_general_desc')}</p>
           </div>
         </div>
       </div>

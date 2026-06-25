@@ -9,8 +9,6 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /api/health
-    domains:
-      - bidmont.onrender.com
     envVars:
       - key: ENVIRONMENT
         value: production

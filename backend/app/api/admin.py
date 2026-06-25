@@ -5,14 +5,66 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 
 from app.core.database import get_db
-from app.core.security import get_current_admin
+from app.core.security import get_current_admin, hash_password, create_access_token
 from app.models.domain import (
     User, UserRole, Auction, AuctionStatus, Bid, Payment, Commission, SupportTicket,
 )
-from app.schemas.auth import UserResponse
+from app.schemas.auth import UserResponse, TokenResponse
 from app.schemas.auction import AuctionResponse
 
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+# ---- Seed Admin (first-run only) ----
+@admin_router.get("/seed", response_model=TokenResponse)
+async def seed_admin(
+    email: str = Query("admin@bidmont.me", description="Admin email"),
+    password: str = Query("admin123", min_length=6, description="Admin password"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create the first admin user. Only works if no admin exists yet."""
+    # Check if any admin already exists
+    result = await db.execute(select(User).where(User.role == UserRole.admin))
+    existing_admin = result.scalars().first()
+    if existing_admin:
+        raise HTTPException(status_code=400, detail="Admin user already exists")
+
+    # Check if email is taken by another role
+    result = await db.execute(select(User).where(User.email == email))
+    existing_user = result.scalars().first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already in use")
+
+    import uuid
+    user = User(
+        id=str(uuid.uuid4()),
+        name="Admin",
+        email=email,
+        password_hash=hash_password(password),
+        role=UserRole.admin,
+        status="active",
+        accepted_terms=True,
+        accepted_privacy=True,
+        marketing_consent=False,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
+
+    return TokenResponse(
+        access_token=access_token,
+        user=UserResponse(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            phone=user.phone,
+            role=user.role.value,
+            status=user.status,
+            created_at=str(user.created_at) if user.created_at else "",
+        ),
+    )
 
 
 # ---- Users ----

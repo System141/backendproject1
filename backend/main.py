@@ -59,6 +59,9 @@ MISSING_COLUMNS = {
     "support_tickets": [
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ],
+    "audit_logs": [
+        ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+    ],
 }
 
 

@@ -109,6 +109,7 @@ class Bid(Base):
     created_at = Column(DateTime, default=_utcnow)
     ip_address = Column(String)
 
+    user = relationship("User", foreign_keys=[user_id])
     auction = relationship("Auction", backref="bids")
 
 
@@ -170,6 +171,7 @@ class NotificationType(str, enum.Enum):
     payment_received = "payment_received"
     auction_approved = "auction_approved"
     auction_rejected = "auction_rejected"
+    auction_completed = "auction_completed"
 
 
 class Notification(Base):

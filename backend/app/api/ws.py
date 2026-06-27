@@ -55,7 +55,7 @@ class ConnectionManager:
             if not room["connections"]:
                 del self.active_connections[auction_id]
             else:
-                asyncio.ensure_future(self._broadcast_user_count(auction_id))
+                asyncio.create_task(self._broadcast_user_count(auction_id))
 
     async def _broadcast_user_count(self, auction_id: str):
         room = self.active_connections.get(auction_id)

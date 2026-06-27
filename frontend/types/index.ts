@@ -47,6 +47,8 @@ export interface Bid {
   user_id: string;
   amount: number;
   created_at: string;
+  user_name?: string;
+  auction_title?: string;
 }
 
 export interface Payment {

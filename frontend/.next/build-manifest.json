@@ -5,8 +5,8 @@
   "devFiles": [],
   "ampDevFiles": [],
   "lowPriorityFiles": [
-    "static/KBsHnmunBNK8oIqee-u7O/_buildManifest.js",
-    "static/KBsHnmunBNK8oIqee-u7O/_ssgManifest.js"
+    "static/R_vRLXzUbc8F58fOD2O8Q/_buildManifest.js",
+    "static/R_vRLXzUbc8F58fOD2O8Q/_ssgManifest.js"
   ],
   "rootMainFiles": [],
   "pages": {
@@ -22,8 +22,8 @@
       "static/chunks/webpack-ee7e63bc15b31913.js",
       "static/chunks/framework-2c16ac744b6cdea6.js",
       "static/chunks/main-b3b2cfc1850e37b9.js",
-      "static/css/86dc7a3a2ceb78c9.css",
-      "static/chunks/pages/_app-4e1f5fc9477054f4.js"
+      "static/css/adeae92b9eafdbef.css",
+      "static/chunks/pages/_app-945d0ed70c79eafe.js"
     ],
     "/_error": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -45,7 +45,7 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/admin-188c0ee51808601d.js"
+      "static/chunks/pages/admin-5ca12b91128e03b7.js"
     ],
     "/auctions": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -61,7 +61,7 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/auctions/[id]-984b85edc89383ec.js"
+      "static/chunks/pages/auctions/[id]-1a02a679dec36620.js"
     ],
     "/auctions/new": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -69,7 +69,7 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/auctions/new-19bfd39669aefe2f.js"
+      "static/chunks/pages/auctions/new-37e734b151eb08bc.js"
     ],
     "/contact": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -86,6 +86,14 @@
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
       "static/chunks/pages/equipment-3d022af936022034.js"
+    ],
+    "/forgot-password": [
+      "static/chunks/webpack-ee7e63bc15b31913.js",
+      "static/chunks/framework-2c16ac744b6cdea6.js",
+      "static/chunks/main-b3b2cfc1850e37b9.js",
+      "static/chunks/424-9cbb12c19be1a03b.js",
+      "static/chunks/862-753d70172475bab4.js",
+      "static/chunks/pages/forgot-password-4992d0b8193e55c4.js"
     ],
     "/general": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -109,7 +117,7 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/login-87971c98305244f9.js"
+      "static/chunks/pages/login-bf0b46d95d6edc01.js"
     ],
     "/my-auctions": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -117,7 +125,15 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/my-auctions-bea0302a5af1e6ea.js"
+      "static/chunks/pages/my-auctions-2865936b198b8f8b.js"
+    ],
+    "/my-bids": [
+      "static/chunks/webpack-ee7e63bc15b31913.js",
+      "static/chunks/framework-2c16ac744b6cdea6.js",
+      "static/chunks/main-b3b2cfc1850e37b9.js",
+      "static/chunks/424-9cbb12c19be1a03b.js",
+      "static/chunks/862-753d70172475bab4.js",
+      "static/chunks/pages/my-bids-b1e06e0ae87f3a2e.js"
     ],
     "/profile": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -125,7 +141,7 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/profile-79251fad479707c9.js"
+      "static/chunks/pages/profile-9984a6ea016236a3.js"
     ],
     "/register": [
       "static/chunks/webpack-ee7e63bc15b31913.js",
@@ -133,7 +149,15 @@
       "static/chunks/main-b3b2cfc1850e37b9.js",
       "static/chunks/424-9cbb12c19be1a03b.js",
       "static/chunks/862-753d70172475bab4.js",
-      "static/chunks/pages/register-acf2089d36bb51be.js"
+      "static/chunks/pages/register-574146002fe51fb5.js"
+    ],
+    "/reset-password": [
+      "static/chunks/webpack-ee7e63bc15b31913.js",
+      "static/chunks/framework-2c16ac744b6cdea6.js",
+      "static/chunks/main-b3b2cfc1850e37b9.js",
+      "static/chunks/424-9cbb12c19be1a03b.js",
+      "static/chunks/862-753d70172475bab4.js",
+      "static/chunks/pages/reset-password-a3b64660740881ee.js"
     ],
     "/vehicles": [
       "static/chunks/webpack-ee7e63bc15b31913.js",

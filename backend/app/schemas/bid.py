@@ -13,6 +13,8 @@ class BidResponse(BaseModel):
     user_id: str
     amount: float
     created_at: datetime
+    user_name: str | None = None
+    auction_title: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -20,3 +22,6 @@ class BidResponse(BaseModel):
 class BidHistoryResponse(BaseModel):
     bids: list[BidResponse]
     total_count: int
+    current_price: float | None = None
+    auction_status: str | None = None
+    min_increment: float | None = None

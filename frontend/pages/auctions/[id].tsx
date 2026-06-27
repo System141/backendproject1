@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useAuth } from '@/hooks/useAuth';
 import Layout from '@/components/Layout';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 
 interface AuctionDetail {
@@ -15,9 +16,18 @@ interface AuctionDetail {
   images?: { id: string; image_url: string; sort_order: number }[];
   category?: { name: string; slug: string };
   winner_user_id?: string;
+  seller_name?: string;
 }
 
 interface Bid { id: string; user_id: string; user_name?: string; amount: number; created_at: string; }
+
+interface BidHistoryResponse {
+  bids: Bid[];
+  total_count: number;
+  current_price?: number;
+  auction_status?: string;
+  min_increment?: number;
+}
 
 export default function AuctionDetail() {
   const { t } = useTranslation();
@@ -35,7 +45,7 @@ export default function AuctionDetail() {
   useEffect(() => {
     if (!id) return;
     api.get<AuctionDetail>(`/api/auctions/${id}`).then(setAuction).catch(console.error);
-    api.get<{total_count: number; bids: Bid[]}>(`/api/auctions/${id}/bids`).then(r => setBids(r.bids)).catch(console.error);
+    api.get<BidHistoryResponse>(`/api/auctions/${id}/bids`).then(r => setBids(r.bids)).catch(console.error);
   }, [id]);
 
   // Countdown timer
@@ -70,6 +80,8 @@ export default function AuctionDetail() {
     }
     if (msg.type === 'auction_status_changed') {
       setAuction(prev => prev ? { ...prev, status: msg.status, winner_user_id: msg.winner_user_id } : prev);
+      // Refresh bid history when auction status changes
+      if (id) api.get<BidHistoryResponse>(`/api/auctions/${id}/bids`).then(r => setBids(r.bids)).catch(console.error);
     }
     if (msg.type === 'ping') {
       // Respond to server ping
@@ -92,10 +104,24 @@ export default function AuctionDetail() {
     }
   };
 
-  const currentPrice = auction?.current_price ?? auction?.start_price ?? 0;
-  const minBid = currentPrice + (auction?.min_increment ?? 0);
+  const handleFinalize = async () => {
+    if (!confirm('Are you sure you want to finalize this auction?')) return;
+    try {
+      const res = await api.post<{status: string; winner_user_id: string | null; winning_bid: number | null}>(`/api/auctions/${id}/finalize`, {});
+      setAuction(prev => prev ? { ...prev, status: 'completed', winner_user_id: res.winner_user_id || undefined } : prev);
+      setSuccess('Auction finalized successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || 'Failed to finalize auction');
+    }
+  };
 
   if (!auction) return <Layout><p>{t('loading')}</p></Layout>;
+
+  const currentPrice = auction.current_price ?? auction.start_price ?? 0;
+  const minBid = currentPrice + (auction.min_increment ?? 0);
+  const isSellerOrAdmin = user && (user.id === auction.seller_id || user.role === 'admin');
+  const auctionEnded = timeLeft === 'Ended' || new Date(auction.end_time).getTime() < Date.now();
 
   return (
     <Layout>
@@ -200,14 +226,34 @@ export default function AuctionDetail() {
 
           {!user && auction.status === 'active' && (
             <p className="text-sm text-gray-500 text-center">
-              <a href="/login" className="text-blue-600 hover:underline">Login</a> to place a bid
+              <Link href="/login" className="text-blue-600 hover:underline">Login</Link> to place a bid
             </p>
           )}
 
-          {auction.status === 'completed' && auction.winner_user_id && (
+          {/* Finalize button for seller/admin when auction has ended */}
+          {isSellerOrAdmin && auction.status === 'active' && auctionEnded && (
+            <button
+              className="w-full bg-purple-600 text-white py-2 rounded-lg text-lg font-semibold hover:bg-purple-700 transition-colors"
+              onClick={handleFinalize}
+            >
+              Finalize Auction
+            </button>
+          )}
+
+          {auction.status === 'completed' && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
               <p className="text-green-800 font-semibold">Auction completed</p>
-              {user?.id === auction.winner_user_id && <p className="text-green-600 text-sm mt-1">You won this auction!</p>}
+              {auction.winner_user_id ? (
+                <>
+                  {user?.id === auction.winner_user_id ? (
+                    <p className="text-green-600 text-sm mt-1">You won this auction!</p>
+                  ) : (
+                    <p className="text-gray-600 text-sm mt-1">Winner: {auction.winner_user_id}</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-500 text-sm mt-1">No winning bids</p>
+              )}
             </div>
           )}
 

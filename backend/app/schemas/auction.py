@@ -66,6 +66,7 @@ class AuctionImageResponse(BaseModel):
 class AuctionResponse(BaseModel):
     id: str
     seller_id: str
+    seller_name: Optional[str] = None
     category_id: int
     title: str
     description: str

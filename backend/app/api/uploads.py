@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,3 +99,79 @@ async def upload_image(
         image_url=image_url,
         sort_order=sort_order,
     )
+
+
+@uploads_router.post(
+    "/batch",
+    response_model=list[AuctionImageResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_images_batch(
+    files: list[UploadFile] = File(...),
+    auction_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload multiple images at once and associate them with an auction.
+    Only the auction owner (seller) can upload images to their auction.
+    """
+    # Verify auction exists and user owns it
+    result = await db.execute(
+        select(Auction).where(Auction.id == auction_id)
+    )
+    auction = result.scalars().first()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    if auction.seller_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only upload images to your own auctions",
+        )
+
+    saved_images = []
+    for sort_idx, file in enumerate(files):
+        # Validate file type
+        if file.content_type not in ALLOWED_TYPES:
+            continue  # Skip invalid files silently
+
+        # Read file content
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            continue  # Skip oversized files silently
+
+        # Generate unique filename
+        ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+
+        # Save to disk
+        with open(filepath, "wb") as f:
+            f.write(content)
+
+        image_url = f"/uploads/{filename}"
+
+        # Save to database
+        img_record = AuctionImage(
+            id=str(uuid.uuid4()),
+            auction_id=auction_id,
+            image_url=image_url,
+            sort_order=sort_idx,
+        )
+        db.add(img_record)
+        saved_images.append(img_record)
+
+    await db.commit()
+
+    # Refresh all saved images
+    for img in saved_images:
+        await db.refresh(img)
+
+    return [
+        AuctionImageResponse(
+            id=img.id,
+            image_url=img.image_url,
+            sort_order=img.sort_order,
+        )
+        for img in saved_images
+    ]

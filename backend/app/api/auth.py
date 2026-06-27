@@ -1,5 +1,6 @@
 import os
 import uuid
+import hashlib
 from datetime import datetime, timedelta, timezone as dt_timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,25 +170,31 @@ async def forgot_password(request: Request, req: PasswordResetRequest, db: Async
 
     # Generate reset token (valid 1 hour)
     reset_token = str(uuid.uuid4())
-    user.reset_token_hash = reset_token  # In production, hash this
+    # Hash the token before storing in DB (defense-in-depth)
+    user.reset_token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
     user.reset_token_expires_at = datetime.now(dt_timezone.utc) + timedelta(hours=1)
     await db.commit()
 
     # In demo/dev mode, return the token directly so the reset form can be tested
     # In production, send an email with the reset link
-    return {
-        "message": "If the email exists, a reset link has been sent.",
-        "reset_token": reset_token,  # Only returned in dev/demo mode
-    }
+    if os.getenv("ENVIRONMENT", "development") == "development":
+        return {
+            "message": "If the email exists, a reset link has been sent.",
+            "reset_token": reset_token,
+        }
+
+    # Production: token is only sent via email (SMTP must be configured)
+    return {"message": "If the email exists, a reset link has been sent."}
 
 
 @auth_router.post("/reset-password")
 @limiter.limit("10/minute")
 async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncSession = Depends(get_db)):
-    # Find user by reset token
+    # Find user by hashed token
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
     result = await db.execute(
         select(User).where(
-            User.reset_token_hash == req.token,
+            User.reset_token_hash == token_hash,
             User.reset_token_expires_at > datetime.now(dt_timezone.utc),
         )
     )

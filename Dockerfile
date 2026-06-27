@@ -16,7 +16,7 @@ COPY index.html /app/index.html
 EXPOSE 8000
 
 # Environment variables for production (override in Render dashboard)
-ENV JWT_SECRET="bidmont-production-secret-change-me"
+# WARNING: JWT_SECRET must be supplied via runtime environment — never hardcode secrets!
 ENV ENVIRONMENT="production"
 ENV CORS_ORIGINS="https://bidmont.onrender.com"
 

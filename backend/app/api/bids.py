@@ -2,15 +2,16 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.domain import Auction, AuctionStatus, Bid, User, UserRole, Payment, PaymentStatus
+from app.models.domain import Auction, AuctionStatus, Bid, User, UserRole
 from app.schemas.bid import BidCreateRequest, BidResponse, BidHistoryResponse
 from app.api.ws import manager
 from app.services.notifications import send_notification, NotificationType
+from app.services.auctions import finalize_auction
 
 bids_router = APIRouter(prefix="/api/auctions", tags=["bids"])
 
@@ -119,6 +120,7 @@ async def place_bid(
         "bid": {
             "id": bid.id,
             "user_id": bid.user_id,
+            "user_name": current_user.name,
             "amount": bid.amount,
             "created_at": bid.created_at.isoformat() if bid.created_at else None,
         },
@@ -152,11 +154,11 @@ async def get_bid_history(
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
 
-    # Count total
+    # Count total using SQL COUNT instead of loading all rows
     count_result = await db.execute(
-        select(Bid).where(Bid.auction_id == auction_id)
+        select(func.count(Bid.id)).where(Bid.auction_id == auction_id)
     )
-    total_count = len(count_result.scalars().all())
+    total_count = count_result.scalar()
 
     # Fetch bids with user relationship loaded
     query = (
@@ -192,7 +194,7 @@ async def get_bid_history(
 
 # ========== FINALIZE (determine winner) ==========
 @bids_router.post("/{auction_id}/finalize", response_model=dict)
-async def finalize_auction(
+async def finalize_auction_endpoint(
     auction_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -229,90 +231,9 @@ async def finalize_auction(
             detail=f"Auction has not ended yet. {remaining:.0f} seconds remaining.",
         )
 
-    # Find the highest bid
-    bid_result = await db.execute(
-        select(Bid)
-        .where(Bid.auction_id == auction_id)
-        .order_by(desc(Bid.amount))
-        .limit(1)
-    )
-    highest_bid = bid_result.scalars().first()
-
-    winner_id = highest_bid.user_id if highest_bid else None
-
-    auction.status = AuctionStatus.completed
-    auction.winner_user_id = winner_id
-
-    # Notify winner and create payment record
-    if winner_id:
-        winner_user = await db.execute(select(User).where(User.id == winner_id))
-        winner_user_obj = winner_user.scalars().first()
-        if winner_user_obj:
-            await send_notification(
-                db, winner_id,
-                NotificationType.auction_won,
-                f"You won: {auction.title}",
-                f"Congratulations! You won the auction '{auction.title}' with a bid of ${highest_bid.amount:.2f}.",
-                auction_id=auction_id,
-                send_email=True,
-            )
-
-        # Create pending payment record for winner
-        payment = Payment(
-            id=str(uuid.uuid4()),
-            auction_id=auction_id,
-            buyer_id=winner_id,
-            amount=highest_bid.amount,
-            status=PaymentStatus.pending,
-        )
-        db.add(payment)
-
-    # Notify seller
-    await send_notification(
-        db, auction.seller_id,
-        NotificationType.auction_completed,
-        f"Auction completed: {auction.title}",
-        f"Your auction '{auction.title}' has ended. Winner: {winner_id if winner_id else 'No bids'}.",
-        auction_id=auction_id,
-        send_email=True,
-    )
-
-    # Notify other bidders they lost
-    if highest_bid:
-        other_bidders_result = await db.execute(
-            select(Bid.user_id)
-            .where(Bid.auction_id == auction_id, Bid.user_id != winner_id)
-            .distinct()
-        )
-        other_bidder_ids = other_bidders_result.scalars().all()
-        for loser_id in other_bidder_ids:
-            await send_notification(
-                db, loser_id,
-                NotificationType.auction_lost,
-                f"Auction ended: {auction.title}",
-                f"The auction '{auction.title}' has ended. Another user won with a bid of ${highest_bid.amount:.2f}.",
-                auction_id=auction_id,
-                send_email=False,
-            )
-
-    # Broadcast auction status change via WebSocket
-    await manager.broadcast(auction_id, {
-        "type": "auction_status_changed",
-        "auction_id": auction_id,
-        "status": "completed",
-        "winner_user_id": winner_id,
-        "winning_bid": highest_bid.amount if highest_bid else None,
-    })
-
-    await db.commit()
-
-    return {
-        "status": "completed",
-        "auction_id": auction_id,
-        "winner_user_id": winner_id,
-        "winning_bid": highest_bid.amount if highest_bid else None,
-        "has_bids": highest_bid is not None,
-    }
+    # Delegate to shared service (includes payment creation, notifications, broadcast)
+    summary = await finalize_auction(db, auction, broadcast=True)
+    return summary
 
 
 # ========== MY BIDS ==========

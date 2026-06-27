@@ -1,15 +1,19 @@
 import os
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from sqlalchemy import text
 from app.core.database import engine, Base
+from app.core.scheduler import run_scheduler
+from app.core.migrations import run_migration_async
 from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, payments_router, support_router, admin_router, notifications_router
+from app.api.ws import manager
 
 # Import all models so Base metadata is populated
 from app.models import *
@@ -18,64 +22,13 @@ from app.models import *
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bidmont")
 
-
 # ---- Rate limiter ----
 limiter = Limiter(key_func=get_remote_address)
 
 
-# ---- Auto-migration: add missing columns safely ----
-MISSING_COLUMNS = {
-    "users": [
-        ("accepted_terms", "BOOLEAN DEFAULT FALSE"),
-        ("accepted_privacy", "BOOLEAN DEFAULT FALSE"),
-        ("marketing_consent", "BOOLEAN DEFAULT FALSE"),
-        ("reset_token_hash", "VARCHAR"),
-        ("reset_token_expires_at", "TIMESTAMP"),
-        ("phone", "VARCHAR"),
-        ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-        ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-    ],
-    "auctions": [
-        ("brand", "VARCHAR"),
-        ("model", "VARCHAR"),
-        ("year", "INTEGER"),
-        ("mileage", "INTEGER"),
-        ("fuel_type", "VARCHAR"),
-        ("transmission", "VARCHAR"),
-        ("damage_status", "VARCHAR"),
-        ("equipment_brand", "VARCHAR"),
-        ("serial_number", "VARCHAR"),
-        ("condition", "VARCHAR"),
-        ("location", "VARCHAR"),
-        ("winner_user_id", "VARCHAR"),
-    ],
-    "bids": [
-        ("ip_address", "VARCHAR"),
-    ],
-    "payments": [
-        ("stripe_session_id", "VARCHAR"),
-        ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-    ],
-    "support_tickets": [
-        ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-    ],
-    "audit_logs": [
-        ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-    ],
-}
-
-
-async def run_migration():
-    """Add missing columns to existing tables. Safe for repeated runs."""
-    async with engine.begin() as conn:
-        for table, columns in MISSING_COLUMNS.items():
-            for col_name, col_type in columns:
-                try:
-                    sql = text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS {col_name} {col_type}')
-                    await conn.execute(sql)
-                    logger.info(f"Migration: added {table}.{col_name}")
-                except Exception as e:
-                    logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
+UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "backend", "uploads"
+)
 
 
 @asynccontextmanager
@@ -84,12 +37,16 @@ async def lifespan(app: FastAPI):
     logger.info("Creating database tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Tables created. Running auto-migration...")
-    await run_migration()
-    logger.info("Startup complete.")
+        # Run auto-migration for missing columns
+        await run_migration_async(conn)
+    logger.info("Tables created, migrations complete.")
+    # Start background scheduler for auto-finalize
+    scheduler_task = asyncio.create_task(run_scheduler())
+    logger.info("Startup complete (scheduler started).")
     yield
-    # Shutdown: nothing to clean up
-    logger.info("Shutdown complete.")
+    # Shutdown: cancel scheduler
+    scheduler_task.cancel()
+    logger.info("Shutdown complete (scheduler cancelled).")
 
 
 app = FastAPI(
@@ -128,6 +85,10 @@ app.include_router(payments_router)
 app.include_router(support_router)
 app.include_router(admin_router)
 app.include_router(notifications_router)
+
+# Mount static files for uploads (before SPA catch-all)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # ---- Health check (required for Render) ----

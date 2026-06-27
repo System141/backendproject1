@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, get_current_seller, get_current_admin
 from app.models.domain import Auction, AuctionStatus, AuctionImage, Category, User, UserRole, NotificationType
 from app.services.notifications import send_notification
+from app.services.auctions import build_auction_response
 from app.schemas.auction import (
     AuctionCreateRequest,
     AuctionUpdateRequest,
@@ -37,33 +38,8 @@ async def _get_auction_or_404(db: AsyncSession, auction_id: str) -> Auction:
 
 
 def _build_auction_response(auction: Auction) -> AuctionResponse:
-    return AuctionResponse(
-        id=auction.id,
-        seller_id=auction.seller_id,
-        category_id=auction.category_id,
-        title=auction.title,
-        description=auction.description,
-        start_price=auction.start_price,
-        current_price=auction.current_price,
-        min_increment=auction.min_increment,
-        start_time=auction.start_time,
-        end_time=auction.end_time,
-        status=auction.status.value,
-        winner_user_id=auction.winner_user_id,
-        is_featured=bool(auction.is_featured) if hasattr(auction, 'is_featured') else False,
-        created_at=auction.created_at,
-        brand=auction.brand,
-        model=auction.model,
-        year=auction.year,
-        mileage=auction.mileage,
-        fuel_type=auction.fuel_type,
-        transmission=auction.transmission,
-        damage_status=auction.damage_status,
-        equipment_brand=auction.equipment_brand,
-        serial_number=auction.serial_number,
-        condition=auction.condition,
-        location=auction.location,
-    )
+    """Build AuctionResponse using the shared service function."""
+    return build_auction_response(auction)
 
 
 # ========== CREATE ==========
@@ -133,7 +109,7 @@ async def list_auctions(
     db: AsyncSession = Depends(get_db),
 ):
     """List auctions with optional filters. Public endpoint."""
-    query = select(Auction).options(selectinload(Auction.images))
+    query = select(Auction).options(selectinload(Auction.images), selectinload(Auction.seller))
 
     if category_id:
         query = query.where(Auction.category_id == category_id)
@@ -174,7 +150,7 @@ async def my_auctions(
     """List current user's own auctions. Seller only."""
     result = await db.execute(
         select(Auction)
-        .options(selectinload(Auction.images))
+        .options(selectinload(Auction.images), selectinload(Auction.seller))
         .where(Auction.seller_id == current_user.id)
         .order_by(desc(Auction.created_at))
     )

@@ -93,7 +93,39 @@
 
 ---
 
-## 6. Özet
+## 7. Revizyon Geçmişi (27.06.2026)
+
+### ✅ Bu Oturumda Yapılan Düzeltmeler
+| # | Sorun | Çözüm |
+|---|-------|-------|
+| 1 | Dockerfile'da hard-coded JWT_SECRET | Kaldırıldı, çalışma zamanı env değişkeni olarak verilmesi zorunlu kılındı |
+| 2 | Forgot-password token'ı hash'siz saklanıyor | `hashlib.sha256` ile hash'lenerek DB'ye yazılıyor, production'da response'ta dönmüyor |
+| 3 | Reset-password token karşılaştırması hash'siz | Gelen token hash'lenip DB'deki hash ile karşılaştırılıyor |
+| 4 | `scheduler.py` ve `bids.py` finalize kodu duplike (~120 satır) | `app/services/auctions.py` içinde `finalize_auction()` servis fonksiyonu oluşturuldu |
+| 5 | `main.py` ve `admin.py` migration kodu duplike | `app/core/migrations.py` ile tek kaynak |
+| 6 | `auctions.py` ve `admin.py` response builder duplike | `app/services/auctions.py:build_auction_response()` ile tek kaynak |
+| 7 | Uploads static dosyaları SPA catch-all tarafından engelleniyor | `app.mount("/uploads", StaticFiles(...))` eklendi |
+| 8 | Frontend (Next.js) ve backend içinde aynı SPA paralel | `frontend/` → `docs/legacy/frontend-nextjs/` arşivlendi |
+| 9 | Üç adet venv (218 MB) | Hepsi silindi, `.gitignore`'a `.venv/` ve `**/venv/` eklendi |
+| 10 | Gereksiz dosyalar (testdir, log.txt, script.node.sh, bidmont.db) | Silindi |
+| 11 | `requirements.txt`'de `starlette==1.3.0` (var olmayan versiyon) | Kaldırıldı (FastAPI kendi bağımlılığını yönetir) |
+| 12 | `requirements.txt`'de packagecloud extra-index | Kaldırıldı |
+| 13 | `docker-compose.yml`'de kullanılmayan volume + deprecated `version` | Temizlendi |
+| 14 | Bid history'de N+1 count (`len(scalars().all())`) | `select(func.count(...))` ile optimize edildi |
+| 15 | `models/__init__.py`'de eksik export'lar | `AuditLog`, `UserRole`, `AuctionStatus` vb. eklendi |
+| 16 | `i18n.ts`'de `require()` yerine import | Düzeltildi |
+| 17 | `useAuth.tsx` ve `types/index.ts` duplike User interface | `useAuth.tsx` artık `types/index.ts`'i import ediyor (elde yapıldı) |
+| 18 | `auctions.py:54` gereksiz `hasattr` kontrolü | `is_featured is not None` ile değiştirildi |
+
+### Devam Eden İyileştirmeler
+| # | Alan | Açıklama |
+|---|------|----------|
+| 1 | Stripe entegrasyonu | `stripe_session_id` alanı var ama gerçek entegrasyon yok |
+| 2 | WebSocket heartbeat lifecycle | `ws.py`'de heartbeat ilk WS bağlantısında başlıyor, lifespan'a taşınabilir |
+| 3 | Pytest conftest deprecation uyarıları | `event_loop` fixture'ı güncellenmeli, `asyncio_default_fixture_loop_scope` ayarlanmalı |
+| 4 | `.docx` dokümanlar | Git LFS veya markdown dönüşümü önerilir |
+
+---
 
 - ✅ **Backend API**: Tüm endpoint'ler canlı ve çalışıyor
 - ✅ **Frontend (index.html)**: 17 sayfa bölümü eksiksiz, ME/EN dil desteği ile Render'da sunuluyor

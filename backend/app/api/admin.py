@@ -8,6 +8,7 @@ from sqlalchemy import select, desc, asc, func, text
 
 from app.core.database import get_db
 from app.core.security import get_current_admin, hash_password, create_access_token
+from app.core.migrations import run_migration_raw
 from app.models.domain import (
     User, UserRole, Auction, AuctionStatus, Bid, Payment, Commission, SupportTicket,
     Category, AuditLog,
@@ -23,45 +24,6 @@ logger = logging.getLogger("bidmont")
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-# ---- Auto-migration helper (raw SQL to avoid ORM column issues) ----
-MISSING_COLUMNS_SQL = {
-    "users": [
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_consent BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash VARCHAR",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    ],
-    "auctions": [
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS brand VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS model VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS year INTEGER",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS mileage INTEGER",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS fuel_type VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS transmission VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS damage_status VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS equipment_brand VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS serial_number VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS condition VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS location VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS winner_user_id VARCHAR",
-        "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE",
-    ],
-    "bids": [
-        "ALTER TABLE bids ADD COLUMN IF NOT EXISTS ip_address VARCHAR",
-    ],
-    "payments": [
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR",
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    ],
-    "support_tickets": [
-        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    ],
-}
-
 # ---- Audit log helper ----
 async def _log_audit(db: AsyncSession, admin_id: str, action: str, entity_type: str, entity_id: str | None = None, details: str | None = None):
     log = AuditLog(
@@ -74,19 +36,6 @@ async def _log_audit(db: AsyncSession, admin_id: str, action: str, entity_type: 
     )
     db.add(log)
     await db.commit()
-
-
-async def run_migration_raw(db: AsyncSession):
-    """Run raw ALTER TABLE migrations to add missing columns."""
-    for table, statements in MISSING_COLUMNS_SQL.items():
-        for sql in statements:
-            try:
-                await db.execute(text(sql))
-                await db.commit()
-                logger.info(f"Migration: executed on {table}")
-            except Exception as e:
-                await db.rollback()
-                logger.warning(f"Migration: skipped on {table} ({e})")
 
 
 # ---- Seed Admin (first-run only, uses raw SQL) ----

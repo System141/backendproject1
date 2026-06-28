@@ -1,3 +1,4 @@
+import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -173,6 +174,51 @@ async def admin_list_payments(
         )
         for p in payments
     ]
+
+
+# ========== Stripe Checkout Session ==========
+@payments_router.post("/stripe/checkout")
+async def create_stripe_checkout(
+    req: PaymentCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Stripe Checkout Session for a won auction. Requires STRIPE_SECRET_KEY env var."""
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
+    if not stripe_key:
+        raise HTTPException(status_code=503, detail="Stripe not configured. Set STRIPE_SECRET_KEY env var.")
+
+    result = await db.execute(select(Auction).where(Auction.id == req.auction_id))
+    auction = result.scalars().first()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    if auction.status.name != "completed":
+        raise HTTPException(status_code=400, detail="Auction is not completed")
+    if auction.winner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the winning bidder can initiate payment")
+
+    import stripe  # lazy — only when configured
+    stripe.api_key = stripe_key
+    buyer_fee = round(auction.current_price * 0.03, 2)
+    total_cents = int((auction.current_price + buyer_fee) * 100)
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8000")
+
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "eur",
+                "product_data": {"name": auction.title},
+                "unit_amount": total_cents,
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
+        success_url=f"{frontend_url}/#profile?payment=success&auction={auction.id}",
+        cancel_url=f"{frontend_url}/#detail?id={auction.id}",
+        metadata={"auction_id": req.auction_id, "buyer_id": current_user.id},
+    )
+    return {"checkout_url": session.url, "session_id": session.id}
 
 
 # ========== ADMIN: List all commissions ==========

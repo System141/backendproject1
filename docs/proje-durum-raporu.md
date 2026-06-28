@@ -61,9 +61,9 @@
 | **Faz 5** | Admin Paneli | **%100** | Tüm tablar canlı ve çalışıyor |
 | **Faz 6** | Ödeme/Komisyon | **%100** | Ödeme oluşturma, komisyon (%5 satıcı), alıcı hizmet bedeli (%3), listing_fee alanı |
 | **Faz 7** | Bildirimler | **%100** | In-app + e-posta (SMTP) |
-| **Faz 8** | Kurumsal | **%55** | Satıcı performans paneli + API, corporate_seller rolü, ME/EN altyapısı; CSV/toplu yükleme MVP dışı |
+| **Faz 8** | Kurumsal | **%100** | Satıcı paneli, Stripe checkout endpoint, SPA tam API entegrasyonu, CSV/toplu yükleme MVP dışı |
 
-**MVP genel tamamlanma: ~%99**
+**MVP genel tamamlanma: %100**
 
 ---
 
@@ -131,10 +131,9 @@
 ### Devam Eden İyileştirmeler
 | # | Alan | Açıklama |
 |---|------|----------|
-| 1 | Stripe entegrasyonu | `stripe_session_id` alanı var ama gerçek entegrasyon yok (API key gerekli) |
-| 2 | WebSocket heartbeat lifecycle | `ws.py`'de heartbeat ilk WS bağlantısında başlıyor, lifespan'a taşınabilir |
-| 3 | Pytest third-party uyarıları | `jose` ve `pytest_asyncio`'dan gelen `utcnow()` / `get_event_loop_policy` uyarıları, kütüphane güncellemesi gerektirir |
-| 4 | `.docx` dokümanlar | Git LFS veya markdown dönüşümü önerilir |
+| 1 | Stripe webhook | `POST /api/payments/stripe/checkout` endpoint'i var; webhook ile otomatik ödeme onayı eklenebilir |
+| 2 | Pytest third-party uyarıları | `jose` ve `pytest_asyncio`'dan gelen `utcnow()` / `get_event_loop_policy` uyarıları, kütüphane güncellemesi gerektirir |
+| 3 | `.docx` dokümanlar | Git LFS veya markdown dönüşümü önerilir |
 
 ---
 

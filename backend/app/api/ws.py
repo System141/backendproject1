@@ -97,8 +97,6 @@ async def auction_websocket(
     token: str = Query(...),
 ):
     """Connect to live auction updates. Requires a valid JWT as query param."""
-    await manager.start_heartbeat()
-
     # Authenticate via token query param
     payload = decode_access_token(token)
     if payload is None:

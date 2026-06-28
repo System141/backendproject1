@@ -9,9 +9,13 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from app.core.database import engine, Base
+from app.core.database import engine, Base, get_db
 from app.core.scheduler import run_scheduler
 from app.core.migrations import run_migration_async
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from fastapi import Depends
+from app.models.domain import Category
 from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, payments_router, support_router, admin_router, notifications_router
 from app.api.ws import manager
 
@@ -42,7 +46,8 @@ async def lifespan(app: FastAPI):
     logger.info("Tables created, migrations complete.")
     # Start background scheduler for auto-finalize
     scheduler_task = asyncio.create_task(run_scheduler())
-    logger.info("Startup complete (scheduler started).")
+    await manager.start_heartbeat()
+    logger.info("Startup complete (scheduler + heartbeat started).")
     yield
     # Shutdown: cancel scheduler
     scheduler_task.cancel()
@@ -99,6 +104,14 @@ async def health():
         "version": "1.0.0",
         "environment": os.getenv("ENVIRONMENT", "development"),
     }
+
+
+# ---- Public categories list (for sell form) ----
+@app.get("/api/categories")
+async def list_categories_public(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Category).order_by(Category.id))
+    cats = result.scalars().all()
+    return [{"id": c.id, "name": c.name, "slug": c.slug, "status": c.status or "active"} for c in cats]
 
 
 # ---- Serve the SPA index.html ----

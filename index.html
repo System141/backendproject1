@@ -307,7 +307,15 @@
         localStorage.removeItem('bidmont_token');
       },
       isLoggedIn() { return !!authToken; },
-      getUser() { return apiUser; }
+      getUser() { return apiUser; },
+      async getAuctions(params={}) { const qs=new URLSearchParams({status:'active',limit:'100',...params}).toString(); return this._fetch(`${API_BASE}/auctions?${qs}`); },
+      async getAuctionDetail(id) { return this._fetch(`${API_BASE}/auctions/${id}`); },
+      async placeBid(auctionId, amount) { return this._fetch(`${API_BASE}/auctions/${auctionId}/bids`, {method:'POST',body:JSON.stringify({amount})}); },
+      async getMyBids() { return this._fetch(`${API_BASE}/auctions/bids/my`); },
+      async getCategories() { return this._fetch(`${API_BASE}/categories`); },
+      async createAuction(data) { return this._fetch(`${API_BASE}/auctions`, {method:'POST',body:JSON.stringify(data)}); },
+      async createStripeCheckout(auctionId) { return this._fetch(`${API_BASE}/payments/stripe/checkout`, {method:'POST',body:JSON.stringify({auction_id:auctionId})}); },
+      async contact(data) { return this._fetch(`${API_BASE}/support/contact`, {method:'POST',body:JSON.stringify(data)}); },
     };
 
     // ============================================================
@@ -327,6 +335,9 @@
     let auctions=store.get('bidmont_auctions',null); if(!auctions){auctions=DEFAULT_AUCTIONS; store.set('bidmont_auctions',auctions)}
     auctions=auctions.map(a=>({...a,cat:normalizeCategory(a.cat)})); store.set('bidmont_auctions',auctions);
     let user=store.get('bidmont_user',null);
+    let categoriesMap={};
+    async function loadAuctionsFromApi(){try{const list=await bidmontApi.getAuctions(); if(list&&list.length>0){const imgs={Vozila:'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',Oprema:'https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=900&q=80',General:'https://images.unsplash.com/photo-1526738549149-8e07eca6c147?auto=format&fit=crop&w=900&q=80'}; auctions=list.map(a=>{const cat=a.brand?'Vozila':(a.equipment_brand?'Oprema':'General'); return {id:a.id,title:a.title,cat,city:a.location||'Montenegro',price:a.current_price,img:imgs[cat],desc:a.description,end:new Date(a.end_time).getTime(),bids:[],_isApi:true,_minIncrement:a.min_increment,status:a.status};}); renderAll();}}catch(e){}}
+    async function loadSellCategories(){try{const cats=await bidmontApi.getCategories(); cats.forEach(c=>{categoriesMap[c.id]=c.name;}); const sel=$('#sellCategory'); if(!sel)return; sel.innerHTML=`<option value="">— ${currentLang==='EN'?'Select category':'Odaberite kategoriju'} —</option>`+cats.filter(c=>c.status==='active').map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); sel.onchange=()=>{const t=(sel.options[sel.selectedIndex]?.text||'').toLowerCase(); $('#vehicleExtra').style.display=/vozil|vehicle/.test(t)?'block':'none';};}catch(e){}}
     const fmt=n=>'€'+Number(n).toLocaleString('en-US');
     const timeLeft=end=>{let d=Math.max(0,end-Date.now()),h=Math.floor(d/36e5),m=Math.floor((d%36e5)/6e4);return h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h ${m}m`};
     function toast(msg,type=''){const t=$('#toast');t.textContent=msg;t.className='toast show '+type;clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>t.className='toast',2600)}
@@ -339,9 +350,9 @@
     function renderGrid(id,items){const el=$(id); if(el) el.innerHTML=items.map(card).join('')||`<div class="panel"><p class="meta">${currentLang==='EN'?'No results.':'Nema rezultata.'}</p></div>`}
     function renderAll(){renderGrid('#auctionGrid',filteredAuctions());renderGrid('#vehicleGrid',auctions.filter(a=>a.cat==='Vozila'));renderGrid('#equipmentGrid',auctions.filter(a=>a.cat==='Oprema'));renderGrid('#generalGrid',auctions.filter(a=>a.cat==='General'));renderGrid('#searchResults',auctions);$('#statCount').textContent=auctions.length+'+';renderAdmin();renderProfile();}
     function filteredAuctions(){let q=($('#auctionSearch')?.value||'').toLowerCase(), c=$('#auctionCategory')?.value||'all', s=$('#auctionSort')?.value||'default';let arr=auctions.filter(a=>(c==='all'||a.cat===c)&&(a.title+a.city+a.desc).toLowerCase().includes(q)); if(s==='priceAsc')arr.sort((a,b)=>a.price-b.price); if(s==='priceDesc')arr.sort((a,b)=>b.price-a.price); if(s==='ending')arr.sort((a,b)=>a.end-b.end); return arr}
-    function route(){let hash=location.hash.replace('#','')||'home';let [page,query]=hash.split('?');if(!$('#'+page))page='home';$$('.page').forEach(p=>p.classList.remove('active'));$('#'+page).classList.add('active');$$('[data-route]').forEach(a=>a.classList.toggle('active',a.dataset.route===page));$('#navLinks').classList.remove('open');window.scrollTo(0,0); if(page==='detail')renderDetail(new URLSearchParams(query||'').get('id')||1); if(page==='profile')renderProfile(); if(page==='admin')renderAdmin();}
-    function renderDetail(id){let a=auctions.find(x=>String(x.id)===String(id))||auctions[0];$('#detailImage').style.backgroundImage=`url('${a.img}')`;$('#detailCat').textContent=currentLang==='EN'?(a.cat==='Vozila'?'Vehicles':(a.cat==='Oprema'?'Equipment':'General')):a.cat;$('#detailTitle').textContent=a.title;$('#detailMeta').textContent=a.city+' · '+a.desc;$('#detailTime').textContent=timeLeft(a.end);$('#detailBidCount').textContent=(a.bids?.length||0)+(currentLang==='EN'?' bids':' ponuda');$('#detailStatus').textContent=a.end>Date.now()?(currentLang==='EN'?'Active':'Aktivna'):(currentLang==='EN'?'Ended':'Završena');$('#detailPrice').textContent=fmt(a.price);$('#bidInput').min=a.price+1;$('#bidInput').placeholder='Min. '+fmt(a.price+1);$('#bidBtn').dataset.id=a.id;$('#bidHistory').innerHTML=(a.bids||[]).slice().sort((x,y)=>y.amount-x.amount).map(b=>`<div class="bid-item"><span>${b.name}</span><b>${fmt(b.amount)}</b></div>`).join('')||`<p class="meta">${currentLang==='EN'?'No bids yet.':'Još nema ponuda.'}</p>`}
-    function bid(){let id=$('#bidBtn').dataset.id, a=auctions.find(x=>String(x.id)===String(id)), val=Number($('#bidInput').value); if(!a)return; if(!user){toast(currentLang==='EN'?'Please login first.':'Prvo se prijavite za licitiranje.'); location.hash='login'; return} if(!val||val<=a.price){toast(currentLang==='EN'?'Bid must be higher than current.':'Ponuda mora biti veća od trenutne cijene.'); return} a.price=val; a.bids=a.bids||[]; a.bids.push({name:user.name||user.email,amount:val,time:Date.now()}); store.set('bidmont_auctions',auctions); toast(currentLang==='EN'?'Bid placed.':'Ponuda je uspješno evidentirana.','success'); renderAll(); renderDetail(id)}
+    function route(){let hash=location.hash.replace('#','')||'home';let [page,query]=hash.split('?');if(!$('#'+page))page='home';$$('.page').forEach(p=>p.classList.remove('active'));$('#'+page).classList.add('active');$$('[data-route]').forEach(a=>a.classList.toggle('active',a.dataset.route===page));$('#navLinks').classList.remove('open');window.scrollTo(0,0); if(page==='detail')renderDetail(new URLSearchParams(query||'').get('id')||1); if(page==='profile')renderProfile(); if(page==='admin')renderAdmin(); if(page==='sell')loadSellCategories();}
+    async function renderDetail(id){let a=auctions.find(x=>String(x.id)===String(id))||auctions[0]; if(!a)return; if(a._isApi){try{const d=await bidmontApi.getAuctionDetail(a.id); if(d.images&&d.images[0])a.img=d.images[0].image_url; a.price=d.current_price; a.end=new Date(d.end_time).getTime(); const bh=await bidmontApi._fetch(`${API_BASE}/auctions/${a.id}/bids`); if(bh&&bh.bids)a.bids=bh.bids.map(b=>({name:b.user_name||'User '+b.user_id.slice(0,6),amount:b.amount,time:new Date(b.created_at).getTime()}));}catch(e){}} $('#detailImage').style.backgroundImage=`url('${a.img}')`;$('#detailCat').textContent=currentLang==='EN'?(a.cat==='Vozila'?'Vehicles':(a.cat==='Oprema'?'Equipment':'General')):a.cat;$('#detailTitle').textContent=a.title;$('#detailMeta').textContent=a.city+' · '+a.desc;$('#detailTime').textContent=timeLeft(a.end);$('#detailBidCount').textContent=(a.bids?.length||0)+(currentLang==='EN'?' bids':' ponuda');$('#detailStatus').textContent=a.end>Date.now()?(currentLang==='EN'?'Active':'Aktivna'):(currentLang==='EN'?'Ended':'Završena');$('#detailPrice').textContent=fmt(a.price);$('#bidInput').min=a.price+1;$('#bidInput').placeholder='Min. '+fmt(a.price+1);$('#bidBtn').dataset.id=a.id;$('#bidHistory').innerHTML=(a.bids||[]).slice().sort((x,y)=>y.amount-x.amount).map(b=>`<div class="bid-item"><span>${b.name}</span><b>${fmt(b.amount)}</b></div>`).join('')||`<p class="meta">${currentLang==='EN'?'No bids yet.':'Još nema ponuda.'}</p>`}
+    async function bid(){let id=$('#bidBtn').dataset.id, a=auctions.find(x=>String(x.id)===String(id)), val=Number($('#bidInput').value); if(!a)return; if(!user&&!bidmontApi.isLoggedIn()){toast(currentLang==='EN'?'Please login first.':'Prvo se prijavite za licitiranje.'); location.hash='login'; return} if(!val||val<=a.price){toast(currentLang==='EN'?'Bid must be higher than current.':'Ponuda mora biti veća od trenutne cijene.'); return} if(a._isApi&&bidmontApi.isLoggedIn()){try{await bidmontApi.placeBid(a.id,val); a.price=val; a.bids.push({name:apiUser?.name||'You',amount:val,time:Date.now()}); toast(currentLang==='EN'?'Bid placed.':'Ponuda je uspješno evidentirana.','success'); renderAll(); renderDetail(id);}catch(err){toast(currentLang==='EN'?(err.detail||'Bid failed.'):(err.detail||'Greška pri licitiranju.'),'error');}}else{a.price=val; a.bids=a.bids||[]; a.bids.push({name:user?.name||user?.email||'Demo',amount:val,time:Date.now()}); store.set('bidmont_auctions',auctions); toast(currentLang==='EN'?'Bid placed.':'Ponuda je uspješno evidentirana.','success'); renderAll(); renderDetail(id);}}
     // ============================================================
     // Admin Panel — Full Implementation
     // ============================================================
@@ -713,9 +724,10 @@
         $('#profileRoleBadge').className = `pill ${role==='admin'?'green':(role==='seller'||role==='corporate_seller'?'red':'')}`;
         $('#profileName').value = name;
         $('#profilePhone').value = apiUser?.phone || user?.phone || '';
-        // My bids logic
+        // My bids logic — API first, demo fallback
         let mine=[]; auctions.forEach(a=>(a.bids||[]).forEach(b=>{if(b.name===(user?.name||user?.email||''))mine.push({title:a.title,amount:b.amount})}));
         bids.innerHTML=mine.map(b=>`<div class="bid-item"><span>${b.title}</span><b>${fmt(b.amount)}</b></div>`).join('')||`<p class="meta">${currentLang==='EN'?'No bids yet.':'Još nemate ponuda.'}</p>`;
+        if(bidmontApi.isLoggedIn()){bidmontApi.getMyBids().then(ab=>{if(ab&&ab.length)bids.innerHTML=ab.map(b=>`<div class="bid-item"><span>${b.auction_title||(b.auction_id?.slice(0,8)+'...')}</span><b>${fmt(b.amount)}</b></div>`).join('');}).catch(()=>{});}
         // Seller dashboard
         const dash=$('#sellerDashboard');
         if(dash&&(role==='seller'||role==='corporate_seller')&&bidmontApi.isLoggedIn()){
@@ -993,9 +1005,10 @@
     ['auctionSearch','auctionCategory','auctionSort'].forEach(id=>$('#'+id)?.addEventListener('input',()=>renderGrid('#auctionGrid',filteredAuctions())));
     $('#auctionCategory')?.addEventListener('change',()=>renderGrid('#auctionGrid',filteredAuctions())); $('#auctionSort')?.addEventListener('change',()=>renderGrid('#auctionGrid',filteredAuctions()));
     $('#globalSearch').addEventListener('input',e=>{const q=e.target.value.toLowerCase();renderGrid('#searchResults',auctions.filter(a=>(a.title+a.cat+a.city+a.desc+fmt(a.price)).toLowerCase().includes(q)))})
-    $('#contactForm')?.addEventListener('submit',e=>{e.preventDefault(); toast(currentLang==='EN'?'Message sent.':'Vaša poruka je poslata.','success'); e.currentTarget.reset()})
+    $('#contactForm')?.addEventListener('submit',async e=>{e.preventDefault(); const fd=new FormData(e.currentTarget); const name=fd.get('name')||'visitor'; const email=fd.get('email')||''; const msg=fd.get('message')||fd.get('msg')||'(no message)'; try{await bidmontApi.contact({subject:`Contact from ${name} <${email}>`,message:msg})}catch(err){} toast(currentLang==='EN'?'Message sent.':'Vaša poruka je poslata.','success'); e.currentTarget.reset()})
     $('#postForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const price=Number(fd.get('price'));const days=Number(fd.get('days')||3);const item={id:Date.now(),title:fd.get('title'),cat:fd.get('cat'),city:fd.get('city'),price,img:fd.get('img')||'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',desc:fd.get('desc'),end:Date.now()+days*86400000,bids:[{name:'Opening bid',amount:price,time:Date.now()}]};auctions.unshift(item);store.set('bidmont_auctions',auctions);e.currentTarget.reset();toast(currentLang==='EN'?'Demo auction posted.':'Demo aukcija je objavljena.','success');renderAll();location.hash='detail?id='+item.id})
     $('#bidBtn').addEventListener('click',bid);
+    $('#sellForm').addEventListener('submit',async e=>{e.preventDefault(); if(!bidmontApi.isLoggedIn()){toast(currentLang==='EN'?'Please login first.':'Prijavite se da biste objavili aukciju.','error'); location.hash='login'; return;} const catId=parseInt($('#sellCategory').value); if(!catId){toast(currentLang==='EN'?'Please select a category.':'Odaberite kategoriju.','error'); return;} const endVal=$('#sellEnd').value; if(!endVal){toast(currentLang==='EN'?'End time required.':'Unesite rok aukcije.','error'); return;} const body={title:$('#sellTitle').value.trim(),description:$('#sellDesc').value.trim(),category_id:catId,start_price:parseFloat($('#sellPrice').value),min_increment:parseFloat($('#sellIncrement').value),end_time:new Date(endVal).toISOString(),brand:$('#sellBrand').value||undefined,model:$('#sellModel').value||undefined,year:$('#sellYear').value?parseInt($('#sellYear').value):undefined,mileage:$('#sellMileage').value?parseInt($('#sellMileage').value):undefined,fuel_type:$('#sellFuel').value||undefined,transmission:$('#sellTrans').value||undefined}; try{await bidmontApi.createAuction(body); e.currentTarget.reset(); toast(currentLang==='EN'?'Auction submitted for review.':'Aukcija poslata na pregled adminu.','success');}catch(err){toast(currentLang==='EN'?(err.detail||'Failed to create auction.'):(err.detail||'Greška pri kreiranju aukcije.'),'error');}});
 
     // ============================================================
     // FAZ 2: Try to restore API session on load
@@ -1038,7 +1051,8 @@
         'pr.t': 'Moj nalog', 'pr.d': 'Upravljajte profilom, pregledajte aukcije i ponude.', 'pr.no': 'Niste prijavljeni', 'pr.nod': 'Prijavite se da biste koristili profil.', 'pr.out': 'Odjava', 'pr.bids': 'Moje ponude', 'pr.edit': 'Uredi profil', 'pr.save': 'Sačuvaj izmjene', 'pr.seller': 'Prodavački panel', 'pr.ss.total': 'Ukupno oglasa', 'pr.ss.active': 'Aktivnih', 'pr.ss.done': 'Završenih', 'pr.ss.rev': 'Ukupan prihod',
         'a.t': 'Admin pregled', 'a.d': 'Jednostavan demo pregled svih aukcija i trenutnih cijena.', 'a.th1': 'ID', 'a.th2': 'Aukcija', 'a.th3': 'Kategorija', 'a.th4': 'Grad', 'a.th5': 'Cijena', 'a.th6': 'Status',
         'det.loc': 'Lokacija', 'det.time': 'Vrijeme do kraja', 'det.bcount': 'Broj ponuda', 'det.st': 'Status', 'det.sta': 'Aktivna aukcija', 'det.cur': 'Trenutna ponuda', 'det.yb': 'Vaša ponuda (€)', 'det.btn': 'Licitiraj sada', 'det.n': 'Ponuda mora biti veća od trenutne cijene. U demo verziji ponude se čuvaju u browseru.', 'det.hist': 'Istorija ponuda',
-        'f.t': 'Online aukcije Crna Gora', 'f.a': 'Admin demo'
+        'f.t': 'Online aukcije Crna Gora', 'f.a': 'Admin demo',
+        'sell.t': 'Kreiraj aukciju', 'sell.d': 'Kreirajte novu aukciju. Aukcija mora biti odobrena od strane admina.', 'sell.title': 'Naslov *', 'sell.desc': 'Opis *', 'sell.cat': 'Kategorija *', 'sell.price': 'Početna cijena (€) *', 'sell.inc': 'Min. povećanje (€) *', 'sell.end': 'Završetak *', 'sell.vextra': 'Detalji vozila', 'sell.submit': 'Objavi aukciju'
       },
       'EN': {
         'nav.auctions': 'Auctions', 'nav.vehicles': 'Vehicles', 'nav.equipment': 'Equipment', 'nav.general': 'General', 'nav.how': 'How it works', 'nav.about': 'About Us', 'nav.contact': 'Contact', 'nav.search': 'Search', 'nav.login': 'Login', 'nav.register': 'Register', 'nav.profile': 'My Account', 'nav.admin': 'Admin',
@@ -1059,7 +1073,8 @@
         'pr.t': 'My Account', 'pr.d': 'Manage your profile, view auctions and bids.', 'pr.no': 'Not logged in', 'pr.nod': 'Log in to use the profile.', 'pr.out': 'Logout', 'pr.bids': 'My Bids', 'pr.edit': 'Edit Profile', 'pr.save': 'Save Changes', 'pr.seller': 'Seller Dashboard', 'pr.ss.total': 'Total Listings', 'pr.ss.active': 'Active', 'pr.ss.done': 'Completed', 'pr.ss.rev': 'Total Revenue',
         'a.t': 'Admin Overview', 'a.d': 'Simple demo overview of all auctions and current prices.', 'a.th1': 'ID', 'a.th2': 'Auction', 'a.th3': 'Category', 'a.th4': 'City', 'a.th5': 'Price', 'a.th6': 'Status',
         'det.loc': 'Location', 'det.time': 'Time Left', 'det.bcount': 'Number of Bids', 'det.st': 'Status', 'det.sta': 'Active Auction', 'det.cur': 'Current Bid', 'det.yb': 'Your Bid (€)', 'det.btn': 'Bid Now', 'det.n': 'Bid must be higher than current price. In demo mode, bids are stored in the browser.', 'det.hist': 'Bid History',
-        'f.t': 'Online Auctions Montenegro', 'f.a': 'Admin Demo'
+        'f.t': 'Online Auctions Montenegro', 'f.a': 'Admin Demo',
+        'sell.t': 'Create Auction', 'sell.d': 'Create a new auction listing. It will be reviewed by admin before going live.', 'sell.title': 'Title *', 'sell.desc': 'Description *', 'sell.cat': 'Category *', 'sell.price': 'Starting Price (€) *', 'sell.inc': 'Min. Increment (€) *', 'sell.end': 'End Date *', 'sell.vextra': 'Vehicle Details', 'sell.submit': 'Post Auction'
       }
     };
     
@@ -1130,6 +1145,7 @@
       renderAll();
       route();
       applyTranslations();
+      loadAuctionsFromApi();
     });
   </script>
 </body>

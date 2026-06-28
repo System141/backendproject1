@@ -11,8 +11,8 @@ from app.core.security import get_current_user
 
 uploads_router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
-# Allowed MIME types
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# Allowed MIME types → safe extensions (never trust filename)
+ALLOWED_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Upload directory (local storage for MVP)
@@ -37,7 +37,8 @@ async def upload_image(
     Only the auction owner (seller) can upload images to their auction.
     """
     # Validate file type
-    if file.content_type not in ALLOWED_TYPES:
+    ext = ALLOWED_TYPES.get(file.content_type)
+    if not ext:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type: {file.content_type}. Allowed: {', '.join(ALLOWED_TYPES)}",
@@ -65,8 +66,7 @@ async def upload_image(
                 detail="You can only upload images to your own auctions",
             )
 
-    # Generate unique filename
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    # Generate unique filename — ext from validated MIME type, never from filename
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
@@ -132,7 +132,8 @@ async def upload_images_batch(
     saved_images = []
     for sort_idx, file in enumerate(files):
         # Validate file type
-        if file.content_type not in ALLOWED_TYPES:
+        ext = ALLOWED_TYPES.get(file.content_type)
+        if not ext:
             continue  # Skip invalid files silently
 
         # Read file content
@@ -140,8 +141,7 @@ async def upload_images_batch(
         if len(content) > MAX_FILE_SIZE:
             continue  # Skip oversized files silently
 
-        # Generate unique filename
-        ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+        # ext from validated MIME type, never from filename
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
 

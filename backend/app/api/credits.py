@@ -91,15 +91,14 @@ async def stripe_credit_webhook(
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
 
+    if not webhook_secret:
+        raise HTTPException(400, "Webhook secret not configured")
+
     import stripe
 
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
     try:
-        if webhook_secret:
-            event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
-        else:
-            import json
-            event = stripe.Event.construct_from(json.loads(payload), stripe.api_key)
+        event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
     except Exception as e:
         raise HTTPException(400, f"Webhook error: {e}")
 

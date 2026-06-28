@@ -177,7 +177,7 @@ async def forgot_password(request: Request, req: PasswordResetRequest, db: Async
 
     # In demo/dev mode, return the token directly so the reset form can be tested
     # In production, send an email with the reset link
-    if os.getenv("ENVIRONMENT", "development") == "development":
+    if os.getenv("ENVIRONMENT") == "development":
         return {
             "message": "If the email exists, a reset link has been sent.",
             "reset_token": reset_token,

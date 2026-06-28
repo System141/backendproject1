@@ -39,13 +39,18 @@ async def _log_audit(db: AsyncSession, admin_id: str, action: str, entity_type: 
 
 
 # ---- Seed Admin (first-run only, uses raw SQL) ----
-@admin_router.get("/seed", response_model=TokenResponse)
+@admin_router.post("/seed", response_model=TokenResponse)
 async def seed_admin(
     email: str = Query("admin@bidmont.me", description="Admin email"),
-    password: str = Query("admin123", min_length=6, description="Admin password"),
+    password: str = Query(..., min_length=6, description="Admin password"),
+    secret: str = Query(..., description="Must match SEED_SECRET env var"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create the first admin user. Only works if no admin exists yet."""
+    """Create the first admin user. Requires SEED_SECRET env var match."""
+    seed_secret = os.getenv("SEED_SECRET")
+    if not seed_secret or secret != seed_secret:
+        raise HTTPException(status_code=403, detail="Invalid seed secret")
+
     await run_migration_raw(db)
 
     result = await db.execute(text("SELECT id FROM users WHERE role = 'admin' LIMIT 1"))
@@ -398,7 +403,7 @@ async def admin_list_tickets(
 @admin_router.put("/support-tickets/{ticket_id}", response_model=SupportTicketResponse)
 async def admin_update_ticket(
     ticket_id: str,
-    req: dict,
+    new_status: str = Query(..., pattern=r"^(open|in_progress|resolved|closed)$"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -408,13 +413,11 @@ async def admin_update_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    new_status = req.get("status")
-    if new_status:
-        ticket.status = new_status
-        await db.commit()
-        await db.refresh(ticket)
+    ticket.status = new_status
+    await db.commit()
+    await db.refresh(ticket)
 
-        await _log_audit(db, current_user.id, "update_ticket", "support_ticket", ticket_id, f"Status changed to {new_status}")
+    await _log_audit(db, current_user.id, "update_ticket", "support_ticket", ticket_id, f"Status changed to {new_status}")
 
     return SupportTicketResponse(
         id=ticket.id,

@@ -127,5 +127,5 @@ async def serve_spa(full_path: str):
         os.path.dirname(os.path.dirname(__file__)), "index.html"
     )
     if os.path.exists(index_path):
-        return FileResponse(index_path, media_type="text/html")
+        return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
     return JSONResponse(status_code=404, content={"detail": "index.html not found"})

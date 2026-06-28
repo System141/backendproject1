@@ -35,12 +35,14 @@ MISSING_COLUMNS = {
         ("location", "VARCHAR"),
         ("winner_user_id", "VARCHAR"),
         ("is_featured", "BOOLEAN DEFAULT FALSE"),
+        ("listing_fee", "FLOAT"),
     ],
     "bids": [
         ("ip_address", "VARCHAR"),
     ],
     "payments": [
         ("stripe_session_id", "VARCHAR"),
+        ("buyer_service_fee", "FLOAT"),
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ],
     "support_tickets": [

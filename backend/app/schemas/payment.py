@@ -13,6 +13,7 @@ class PaymentResponse(BaseModel):
     auction_id: str
     buyer_id: str
     amount: float
+    buyer_service_fee: Optional[float] = None
     status: str
     stripe_session_id: Optional[str] = None
     created_at: str

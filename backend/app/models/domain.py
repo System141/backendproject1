@@ -74,6 +74,7 @@ class Auction(Base):
     status = Column(Enum(AuctionStatus), default=AuctionStatus.pending_approval)
     winner_user_id = Column(String, ForeignKey("users.id"), nullable=True)
     is_featured = Column(Boolean, default=False)
+    listing_fee = Column(Float, nullable=True)  # fee charged to seller for posting
     created_at = Column(DateTime, default=_utcnow)
 
     # Vehicle-specific fields (nullable)
@@ -138,6 +139,7 @@ class Payment(Base):
     auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
     buyer_id = Column(String, ForeignKey("users.id"), nullable=False)
     amount = Column(Float, nullable=False)
+    buyer_service_fee = Column(Float, nullable=True)  # 3% service fee on buyer
     status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
     stripe_session_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)

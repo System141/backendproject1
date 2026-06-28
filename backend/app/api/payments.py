@@ -39,11 +39,13 @@ async def create_payment(
     if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Payment already exists for this auction")
 
+    buyer_service_fee = round(auction.current_price * 0.03, 2)  # 3% buyer fee
     payment = Payment(
         id=str(uuid.uuid4()),
         auction_id=req.auction_id,
         buyer_id=current_user.id,
         amount=auction.current_price,
+        buyer_service_fee=buyer_service_fee,
         status=PaymentStatus.pending,
         stripe_session_id=req.stripe_session_id,
     )
@@ -56,6 +58,7 @@ async def create_payment(
         auction_id=payment.auction_id,
         buyer_id=payment.buyer_id,
         amount=payment.amount,
+        buyer_service_fee=payment.buyer_service_fee,
         status=payment.status.value if hasattr(payment.status, 'value') else str(payment.status),
         stripe_session_id=payment.stripe_session_id,
         created_at=str(payment.created_at) if payment.created_at else "",
@@ -80,6 +83,7 @@ async def my_payments(
             auction_id=p.auction_id,
             buyer_id=p.buyer_id,
             amount=p.amount,
+            buyer_service_fee=p.buyer_service_fee,
             status=p.status.value if hasattr(p.status, 'value') else str(p.status),
             stripe_session_id=p.stripe_session_id,
             created_at=str(p.created_at) if p.created_at else "",
@@ -162,6 +166,7 @@ async def admin_list_payments(
             auction_id=p.auction_id,
             buyer_id=p.buyer_id,
             amount=p.amount,
+            buyer_service_fee=p.buyer_service_fee,
             status=p.status.value if hasattr(p.status, 'value') else str(p.status),
             stripe_session_id=p.stripe_session_id,
             created_at=str(p.created_at) if p.created_at else "",

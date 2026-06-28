@@ -59,11 +59,11 @@
 | **Faz 3** | İlan Oluşturma | **%100** | CRUD + onay/red akışı + bildirim |
 | **Faz 4** | Teklif Motoru | **%100** | REST API + WebSocket + heartbeat + süre uzatma |
 | **Faz 5** | Admin Paneli | **%100** | Tüm tablar canlı ve çalışıyor |
-| **Faz 6** | Ödeme/Komisyon | **%90** | Ödeme oluşturma, durum güncelleme, komisyon |
+| **Faz 6** | Ödeme/Komisyon | **%100** | Ödeme oluşturma, komisyon (%5 satıcı), alıcı hizmet bedeli (%3), listing_fee alanı |
 | **Faz 7** | Bildirimler | **%100** | In-app + e-posta (SMTP) |
-| **Faz 8** | Kurumsal | **%10** | Destek talebi sistemi var |
+| **Faz 8** | Kurumsal | **%55** | Satıcı performans paneli + API, corporate_seller rolü, ME/EN altyapısı; CSV/toplu yükleme MVP dışı |
 
-**MVP genel tamamlanma: ~%98**
+**MVP genel tamamlanma: ~%99**
 
 ---
 
@@ -125,6 +125,8 @@
 | 1 | `renderDetail` TypeError: `$('#detailCity')` null, fiyat/teklif/sayaç render edilmiyordu | `#detailCity` kaldırıldı, şehir `#detailMeta`'ya `city · desc` formatında eklendi |
 | 2 | `#detailStatus` alanı hiç doldurulmuyordu | `renderDetail`'e bitiş zamanına göre "Aktivna/Završena" atandı |
 | 3 | pytest `asyncio_default_fixture_loop_scope` uyarısı | `pytest.ini`'ye eklendi |
+| 4 | Faz 6: alıcı hizmet bedeli ve satıcı ilan ücreti eksikti | `Payment.buyer_service_fee` (%3 otomatik), `Auction.listing_fee` eklendi; migration'a dahil edildi |
+| 5 | Faz 8: Satıcı/kurumsal panel eksikti | `GET /api/users/me/seller-stats` eklendi; profil sayfasına satıcı dashboard bölümü eklendi (ME/EN) |
 
 ### Devam Eden İyileştirmeler
 | # | Alan | Açıklama |

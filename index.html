@@ -780,7 +780,7 @@
         }
         // Seller dashboard
         const dash=$('#sellerDashboard');
-        if(dash&&(role==='seller'||role==='corporate_seller')&&bidmontApi.isLoggedIn()){
+        if(dash&&bidmontApi.isLoggedIn()){
           dash.style.display='block';
           bidmontApi._fetch(`${API_BASE}/users/me/seller-stats`).then(s=>{
             $('#ssTotal').textContent=s.total_auctions;

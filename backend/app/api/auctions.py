@@ -47,7 +47,7 @@ def _build_auction_response(auction: Auction) -> AuctionResponse:
 @auctions_router.post("", response_model=AuctionResponse, status_code=status.HTTP_201_CREATED)
 async def create_auction(
     req: AuctionCreateRequest,
-    current_user: User = Depends(get_current_seller),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new auction listing (seller / corporate_seller only)."""
@@ -151,7 +151,7 @@ async def list_auctions(
 # ========== MY AUCTIONS (seller) ==========
 @auctions_router.get("/my", response_model=list[AuctionResponse])
 async def my_auctions(
-    current_user: User = Depends(get_current_seller),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List current user's own auctions. Seller only."""
@@ -200,7 +200,7 @@ async def get_auction(
 async def update_auction(
     auction_id: str,
     req: AuctionUpdateRequest,
-    current_user: User = Depends(get_current_seller),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an auction. Only the owner seller can update, and only while pending."""
@@ -226,7 +226,7 @@ async def update_auction(
 @auctions_router.delete("/{auction_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_auction(
     auction_id: str,
-    current_user: User = Depends(get_current_seller),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an auction. Only the owner seller, and only while pending."""

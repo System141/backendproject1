@@ -53,7 +53,7 @@ async def update_me(
 
 @users_router.get("/me/seller-stats")
 async def seller_stats(
-    current_user: User = Depends(get_current_seller),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Corporate/seller performance dashboard stats."""

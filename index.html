@@ -221,17 +221,17 @@
               <div class="info-box"><strong id="ssRevenue">—</strong><p class="meta" style="margin-top:6px" data-i18n="pr.ss.rev">Ukupan prihod</p></div>
             </div>
             <div style="margin-top:16px;padding:14px;background:var(--surface,#f5f5f5);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-              <div><span style="font-size:13px;color:var(--muted,#888)">Krediti za oglašavanje</span><br><strong id="creditsBalance" style="font-size:22px">—</strong></div>
-              <button class="btn dark-btn" id="buyCreditsBtn" style="white-space:nowrap">Kupi kredite</button>
+              <div><span style="font-size:13px;color:var(--muted,#888)" data-i18n="pr.credits.label">Krediti za oglašavanje</span><br><strong id="creditsBalance" style="font-size:22px">—</strong></div>
+              <button class="btn dark-btn" id="buyCreditsBtn" style="white-space:nowrap" data-i18n="pr.credits.buy">Kupi kredite</button>
             </div>
             <div id="creditsModal" style="display:none;margin-top:12px;padding:16px;border:1px solid var(--line,#e5e5e5);border-radius:8px">
-              <p style="margin-bottom:12px;font-weight:600">Odaberite paket:</p>
+              <p style="margin-bottom:12px;font-weight:600" data-i18n="pr.credits.choose">Odaberite paket:</p>
               <div style="display:grid;gap:8px">
-                <button class="btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('starter')"><span>Starter — 100 kredita</span><span>€10</span></button>
-                <button class="btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('standard')"><span>Standard — 300 kredita</span><span>€25</span></button>
-                <button class="btn primary-btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('pro')"><span>Pro — 1000 kredita</span><span>€75</span></button>
+                <button class="btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('starter')"><span data-i18n="pr.pkg.starter">Starter — 100 kredita</span><span>€10</span></button>
+                <button class="btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('standard')"><span data-i18n="pr.pkg.standard">Standard — 300 kredita</span><span>€25</span></button>
+                <button class="btn primary-btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('pro')"><span data-i18n="pr.pkg.pro">Pro — 1000 kredita</span><span>€75</span></button>
               </div>
-              <button class="btn" style="margin-top:10px;width:100%" onclick="$('#creditsModal').style.display='none'">Odustani</button>
+              <button class="btn" style="margin-top:10px;width:100%" onclick="$('#creditsModal').style.display='none'" data-i18n="pr.credits.cancel">Odustani</button>
             </div>
             <div style="margin-top:16px">
               <h4 style="margin-bottom:10px;font-size:14px" data-i18n="pr.mylistings">Moji oglasi</h4>
@@ -362,7 +362,7 @@
     let user=store.get('bidmont_user',null);
     let categoriesMap={};
     async function loadAuctionsFromApi(){try{const list=await bidmontApi.getAuctions(); if(list&&list.length>0){const imgs={Vozila:'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80',Oprema:'https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=900&q=80',General:'https://images.unsplash.com/photo-1526738549149-8e07eca6c147?auto=format&fit=crop&w=900&q=80'}; auctions=list.map(a=>{const cat=a.brand?'Vozila':(a.equipment_brand?'Oprema':'General'); return {id:a.id,title:a.title,cat,city:a.location||'Montenegro',price:a.current_price,img:imgs[cat],desc:a.description,end:new Date(a.end_time).getTime(),bids:[],_isApi:true,_minIncrement:a.min_increment,status:a.status};}); renderAll();}}catch(e){}}
-    async function loadSellCategories(){try{const cats=await bidmontApi.getCategories(); cats.forEach(c=>{categoriesMap[c.id]=c.name;}); const sel=$('#sellCategory'); if(!sel)return; sel.innerHTML=`<option value="">— ${currentLang==='EN'?'Select category':'Odaberite kategoriju'} —</option>`+cats.filter(c=>c.status==='active').map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); sel.onchange=()=>{const t=(sel.options[sel.selectedIndex]?.text||'').toLowerCase(); $('#vehicleExtra').style.display=/vozil|vehicle/.test(t)?'block':'none';};}catch(e){} if(bidmontApi.isLoggedIn()){try{const r=await bidmontApi.getCreditsBalance(); const note=$('#sellCreditNote'); if(note) note.textContent=`Vaš saldo: ${r.credits_balance??0} kredita · Objava košta 10 kredita`;}catch(e){}}}
+    async function loadSellCategories(){try{const cats=await bidmontApi.getCategories(); cats.forEach(c=>{categoriesMap[c.id]=c.name;}); const sel=$('#sellCategory'); if(!sel)return; sel.innerHTML=`<option value="">— ${currentLang==='EN'?'Select category':'Odaberite kategoriju'} —</option>`+cats.filter(c=>c.status==='active').map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); sel.onchange=()=>{const t=(sel.options[sel.selectedIndex]?.text||'').toLowerCase(); $('#vehicleExtra').style.display=/vozil|vehicle/.test(t)?'block':'none';};}catch(e){} if(bidmontApi.isLoggedIn()){try{const r=await bidmontApi.getCreditsBalance(); const note=$('#sellCreditNote'); if(note) note.textContent=currentLang==='EN'?`Your balance: ${r.credits_balance??0} credits · Listing costs 10 credits`:`Vaš saldo: ${r.credits_balance??0} kredita · Objava košta 10 kredita`;}catch(e){}}}
     const fmt=n=>'€'+Number(n).toLocaleString('en-US');
     const timeLeft=end=>{let d=Math.max(0,end-Date.now()),h=Math.floor(d/36e5),m=Math.floor((d%36e5)/6e4);return h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h ${m}m`};
     function toast(msg,type=''){const t=$('#toast');t.textContent=msg;t.className='toast show '+type;clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>t.className='toast',2600)}
@@ -788,7 +788,7 @@
             $('#ssCompleted').textContent=s.completed_auctions;
             $('#ssRevenue').textContent=fmt(s.total_revenue);
           }).catch(()=>{});
-          bidmontApi.getCreditsBalance().then(r=>{ $('#creditsBalance').textContent=(r.credits_balance??0)+' kred.'; }).catch(()=>{});
+          bidmontApi.getCreditsBalance().then(r=>{ $('#creditsBalance').textContent=`${r.credits_balance??0} ${currentLang==='EN'?'credits':'kredita'}`; }).catch(()=>{});
           bidmontApi._fetch(`${API_BASE}/auctions/my`).then(lst=>{
             const el=$('#mySellerListings');
             if(!el)return;
@@ -1111,7 +1111,7 @@
         'r.t': 'Registracija', 'r.d': 'Kreirajte BidMont nalog. Sva polja su obavezna.', 'r.n': 'Ime i prezime / Kompanija', 'r.phone': 'Telefon', 'r.type': 'Tip naloga', 'r.t1': 'Kupac', 'r.t2': 'Prodavac', 'r.t3': 'Osiguravajuća kuća / Flota', 'r.btn': 'Registruj se', 'r.terms': 'Prihvatam Uslove korišćenja *', 'r.privacy': 'Prihvatam Politiku privatnosti *', 'r.marketing': 'Želim da primam promotivne ponude i novosti (opciono)', 'r.confirm': 'Potvrdi lozinku',
         'fpt.t': 'Zaboravili ste lozinku?', 'fpt.d': 'Unesite e-mail adresu i poslaćemo vam link za resetovanje lozinke.', 'fpt.btn': 'Pošalji link za reset', 'fpt.back': '← Nazad na prijavu',
         'rpt.t': 'Resetuj lozinku', 'rpt.d': 'Unesite novu lozinku za vaš nalog.', 'rpt.btn': 'Resetuj lozinku', 'rpt.back': '← Nazad na prijavu',
-        'pr.t': 'Moj nalog', 'pr.d': 'Upravljajte profilom, pregledajte aukcije i ponude.', 'pr.no': 'Niste prijavljeni', 'pr.nod': 'Prijavite se da biste koristili profil.', 'pr.out': 'Odjava', 'pr.bids': 'Moje ponude', 'pr.edit': 'Uredi profil', 'pr.save': 'Sačuvaj izmjene', 'pr.seller': 'Prodavački panel', 'pr.ss.total': 'Ukupno oglasa', 'pr.ss.active': 'Aktivnih', 'pr.ss.done': 'Završenih', 'pr.ss.rev': 'Ukupan prihod', 'pr.won': 'Osvojene aukcije', 'pr.mylistings': 'Moji oglasi', 'pr.newlisting': '+ Novi oglas',
+        'pr.t': 'Moj nalog', 'pr.d': 'Upravljajte profilom, pregledajte aukcije i ponude.', 'pr.no': 'Niste prijavljeni', 'pr.nod': 'Prijavite se da biste koristili profil.', 'pr.out': 'Odjava', 'pr.bids': 'Moje ponude', 'pr.edit': 'Uredi profil', 'pr.save': 'Sačuvaj izmjene', 'pr.seller': 'Prodavački panel', 'pr.ss.total': 'Ukupno oglasa', 'pr.ss.active': 'Aktivnih', 'pr.ss.done': 'Završenih', 'pr.ss.rev': 'Ukupan prihod', 'pr.won': 'Osvojene aukcije', 'pr.mylistings': 'Moji oglasi', 'pr.newlisting': '+ Novi oglas', 'pr.credits.label': 'Krediti za oglašavanje', 'pr.credits.buy': 'Kupi kredite', 'pr.credits.choose': 'Odaberite paket:', 'pr.credits.cancel': 'Odustani', 'pr.pkg.starter': 'Starter — 100 kredita', 'pr.pkg.standard': 'Standard — 300 kredita', 'pr.pkg.pro': 'Pro — 1000 kredita',
         'a.t': 'Admin pregled', 'a.d': 'Jednostavan demo pregled svih aukcija i trenutnih cijena.', 'a.th1': 'ID', 'a.th2': 'Aukcija', 'a.th3': 'Kategorija', 'a.th4': 'Grad', 'a.th5': 'Cijena', 'a.th6': 'Status',
         'det.loc': 'Lokacija', 'det.time': 'Vrijeme do kraja', 'det.bcount': 'Broj ponuda', 'det.st': 'Status', 'det.sta': 'Aktivna aukcija', 'det.cur': 'Trenutna ponuda', 'det.yb': 'Vaša ponuda (€)', 'det.btn': 'Licitiraj sada', 'det.n': 'Ponuda mora biti veća od trenutne cijene. U demo verziji ponude se čuvaju u browseru.', 'det.hist': 'Istorija ponuda',
         'f.t': 'Online aukcije Crna Gora', 'f.a': 'Admin demo',
@@ -1133,7 +1133,7 @@
         'r.t': 'Registration', 'r.d': 'Create your BidMont account. All fields are required.', 'r.n': 'Full Name / Company', 'r.phone': 'Phone', 'r.type': 'Account Type', 'r.t1': 'Buyer', 'r.t2': 'Seller', 'r.t3': 'Insurance / Fleet', 'r.btn': 'Register', 'r.terms': 'I accept the Terms of Service *', 'r.privacy': 'I accept the Privacy Policy *', 'r.marketing': 'I want to receive promotional offers and news (optional)', 'r.confirm': 'Confirm Password',
         'fpt.t': 'Forgot Password?', 'fpt.d': 'Enter your email address and we will send you a password reset link.', 'fpt.btn': 'Send Reset Link', 'fpt.back': '← Back to Login',
         'rpt.t': 'Reset Password', 'rpt.d': 'Enter a new password for your account.', 'rpt.btn': 'Reset Password', 'rpt.back': '← Back to Login',
-        'pr.t': 'My Account', 'pr.d': 'Manage your profile, view auctions and bids.', 'pr.no': 'Not logged in', 'pr.nod': 'Log in to use the profile.', 'pr.out': 'Logout', 'pr.bids': 'My Bids', 'pr.edit': 'Edit Profile', 'pr.save': 'Save Changes', 'pr.seller': 'Seller Dashboard', 'pr.ss.total': 'Total Listings', 'pr.ss.active': 'Active', 'pr.ss.done': 'Completed', 'pr.ss.rev': 'Total Revenue', 'pr.won': 'Won Auctions', 'pr.mylistings': 'My Listings', 'pr.newlisting': '+ New Listing',
+        'pr.t': 'My Account', 'pr.d': 'Manage your profile, view auctions and bids.', 'pr.no': 'Not logged in', 'pr.nod': 'Log in to use the profile.', 'pr.out': 'Logout', 'pr.bids': 'My Bids', 'pr.edit': 'Edit Profile', 'pr.save': 'Save Changes', 'pr.seller': 'Seller Dashboard', 'pr.ss.total': 'Total Listings', 'pr.ss.active': 'Active', 'pr.ss.done': 'Completed', 'pr.ss.rev': 'Total Revenue', 'pr.won': 'Won Auctions', 'pr.mylistings': 'My Listings', 'pr.newlisting': '+ New Listing', 'pr.credits.label': 'Advertising Credits', 'pr.credits.buy': 'Buy Credits', 'pr.credits.choose': 'Choose a package:', 'pr.credits.cancel': 'Cancel', 'pr.pkg.starter': 'Starter — 100 credits', 'pr.pkg.standard': 'Standard — 300 credits', 'pr.pkg.pro': 'Pro — 1000 credits',
         'a.t': 'Admin Overview', 'a.d': 'Simple demo overview of all auctions and current prices.', 'a.th1': 'ID', 'a.th2': 'Auction', 'a.th3': 'Category', 'a.th4': 'City', 'a.th5': 'Price', 'a.th6': 'Status',
         'det.loc': 'Location', 'det.time': 'Time Left', 'det.bcount': 'Number of Bids', 'det.st': 'Status', 'det.sta': 'Active Auction', 'det.cur': 'Current Bid', 'det.yb': 'Your Bid (€)', 'det.btn': 'Bid Now', 'det.n': 'Bid must be higher than current price. In demo mode, bids are stored in the browser.', 'det.hist': 'Bid History',
         'f.t': 'Online Auctions Montenegro', 'f.a': 'Admin Demo',

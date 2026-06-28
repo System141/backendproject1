@@ -26,6 +26,7 @@
     .lang-dropdown{position:relative;display:inline-block} .lang-btn{background:none;border:none;font-size:13px;font-weight:700;color:#111;display:flex;align-items:center;gap:4px;cursor:pointer} .lang-menu{position:absolute;top:100%;right:-10px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.12);border-radius:10px;overflow:hidden;display:none;min-width:140px;z-index:2000;flex-direction:column;border:1px solid var(--line);margin-top:14px} .lang-menu.show{display:flex} .lang-item{padding:12px 18px;font-size:13px;font-weight:600;color:#333;text-decoration:none;display:flex;align-items:center;gap:8px;cursor:pointer} .lang-item:hover{background:#f5f7fb} .lang-item.active{color:var(--red);background:#fff1f2}
     .admin-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}.admin-tab{padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:#fff;color:#333;font-weight:700;font-size:13px;transition:.2s;cursor:pointer}.admin-tab:hover{background:#f5f7fb}.admin-tab.active{background:var(--navy2);color:#fff;border-color:var(--navy2)}.admin-content{min-height:400px}.admin-loading{text-align:center;padding:48px;color:var(--muted)}.admin-empty{text-align:center;padding:32px;color:var(--muted)}.admin-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:3000;display:none;align-items:center;justify-content:center}.admin-overlay.show{display:flex}.admin-modal{background:#fff;border-radius:20px;padding:28px;max-width:520px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.25)}.admin-modal h3{font-size:18px;margin-bottom:8px}.admin-modal p{color:var(--muted);font-size:14px;margin-bottom:20px}.admin-modal-actions{display:flex;gap:10px;justify-content:flex-end}.admin-badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}.admin-badge.active{background:#ecfdf3;color:#027a48}.admin-badge.suspended,.admin-badge.pending{background:#fffaec;color:#b54708}.admin-badge.banned,.admin-badge.failed{background:#fff1f3;color:#9f1239}.admin-badge.completed{background:#eef4ff;color:#175cd3}.admin-badge.refunded,.admin-badge.closed{background:#f5f5f5;color:#666}.admin-badge.in_progress{background:#fffaec;color:#b54708}.admin-badge.open{background:#eef4ff;color:#175cd3}.admin-badge.resolved{background:#ecfdf3;color:#027a48}.admin-badge.cancelled{background:#fff1f3;color:#9f1239}.admin-badge.pending_approval{background:#fffaec;color:#b54708}.admin-filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.admin-filter-bar select,.admin-filter-bar input{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-size:13px;background:#fff;min-height:40px}.admin-tbl{width:100%;border-collapse:collapse;font-size:13px}.admin-tbl th{text-align:left;padding:12px 10px;border-bottom:2px solid var(--line);color:#344054;background:#f8fafc;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}.admin-tbl td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}.admin-tbl tr:hover td{background:#fafbfc}.admin-btn{padding:5px 11px;border-radius:8px;border:0;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}.admin-btn-sm{padding:4px 8px;font-size:11px}.admin-btn-green{background:#ecfdf3;color:#027a48}.admin-btn-green:hover{background:#d1fae5}.admin-btn-red{background:#fff1f3;color:#9f1239}.admin-btn-red:hover{background:#fecdd6}.admin-btn-yellow{background:#fffaec;color:#b54708}.admin-btn-yellow:hover{background:#fef3c7}.admin-btn-blue{background:#eef4ff;color:#175cd3}.admin-btn-blue:hover{background:#d6e4ff}.admin-btn-gray{background:#f5f5f5;color:#666}.admin-btn-gray:hover{background:#e5e5e5}.admin-btn-dark{background:var(--navy2);color:#fff;padding:8px 18px}.admin-btn-dark:hover{background:var(--navy3)}.admin-stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}.admin-stat-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}.admin-stat-card .num{font-size:28px;font-weight:950;color:var(--navy2)}.admin-stat-card .lbl{color:var(--muted);font-size:12px;margin-top:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}.admin-cat-form{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:20px}.admin-cat-form .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}.admin-cat-form .field{display:flex;flex-direction:column;gap:4px}.admin-cat-form .field label{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.admin-toast{position:fixed;top:20px;right:20px;z-index:5000;padding:14px 20px;border-radius:14px;font-size:14px;font-weight:700;display:none;box-shadow:0 16px 40px rgba(0,0,0,.2);max-width:360px}.admin-toast.show{display:block;animation:pop .25s ease}.admin-toast.success{background:#ecfdf3;color:#067647;border:1px solid #abefc6}.admin-toast.error{background:#fff1f3;color:#9f1239;border:1px solid #fecdd6}.admin-detail-modal .msg{background:#f8fafc;border-radius:12px;padding:14px;font-size:13px;line-height:1.6;white-space:pre-wrap;margin:12px 0;max-height:300px;overflow-y:auto}.admin-featured-star{color:#f59e0b;margin-left:2px}
     @media(max-width:620px){.lang-menu{right:-52px}.lang-btn{min-height:38px;padding:0 8px;border:1px solid var(--line);border-radius:9px;background:#fff}}
+    .admin-tbl-wrap{overflow-x:auto}.admin-stat-card.accent-green{border-left:4px solid #027a48}.admin-stat-card.accent-amber{border-left:4px solid #b54708}.admin-stat-card.accent-blue{border-left:4px solid #175cd3}.admin-pending-alert{background:#fffaec;border:1px solid #fde68a;border-radius:14px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;font-size:14px;color:#b54708;font-weight:700}.admin-pending-alert button{margin-left:auto;padding:6px 14px;border-radius:8px;border:0;background:#b54708;color:#fff;font-size:12px;font-weight:800;cursor:pointer}.admin-pill-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}.admin-pill-filter button{padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}.admin-pill-filter button:hover{background:#f0f2f5}.admin-pill-filter button.active{background:var(--navy2);color:#fff;border-color:var(--navy2)}.admin-search-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.admin-search-bar input,.admin-search-bar select{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px;background:#fff;min-height:38px}.tr-pending td{background:#fffbeb}
   </style>
 </head>
 <body>
@@ -382,6 +383,8 @@
     // Admin Panel — Full Implementation
     // ============================================================
     let adminTab = 'stats';
+    let _adminUsersData = [];
+    let currentAuctionFilter = '';
     function adminToast(msg, type='success') {
       let el = document.getElementById('adminToast');
       if (!el) {
@@ -453,40 +456,63 @@
     async function renderAdminStats() {
       try {
         const s = await adminFetch('/admin/stats');
-        document.getElementById('adminContent').innerHTML = `
+        const pendingBanner = s.pending_auctions > 0
+          ? `<div class="admin-pending-alert"><span>${s.pending_auctions} auction${s.pending_auctions > 1 ? 's' : ''} awaiting approval</span><button onclick="renderAdminPanel('auctions')">Review</button></div>`
+          : '';
+        document.getElementById('adminContent').innerHTML = pendingBanner + `
           <div class="admin-stats-grid">
-            <div class="admin-stat-card"><div class="num">${s.total_users}</div><div class="lbl">Users</div></div>
-            <div class="admin-stat-card"><div class="num">${s.total_auctions}</div><div class="lbl">Auctions</div></div>
-            <div class="admin-stat-card"><div class="num">${s.total_bids}</div><div class="lbl">Bids</div></div>
-            <div class="admin-stat-card"><div class="num">${s.active_auctions}</div><div class="lbl">Active</div></div>
+            <div class="admin-stat-card accent-blue"><div class="num">${s.total_users}</div><div class="lbl">Users</div></div>
+            <div class="admin-stat-card accent-blue"><div class="num">${s.total_auctions}</div><div class="lbl">Auctions</div></div>
+            <div class="admin-stat-card accent-blue"><div class="num">${s.total_bids}</div><div class="lbl">Bids</div></div>
+            <div class="admin-stat-card accent-green"><div class="num">${s.active_auctions}</div><div class="lbl">Active</div></div>
             <div class="admin-stat-card"><div class="num">${s.completed_auctions}</div><div class="lbl">Completed</div></div>
-            <div class="admin-stat-card"><div class="num">${s.pending_auctions}</div><div class="lbl">Pending</div></div>
-            <div class="admin-stat-card"><div class="num">$${s.total_revenue.toFixed(2)}</div><div class="lbl">Revenue</div></div>
-            <div class="admin-stat-card"><div class="num">$${s.total_commissions.toFixed(2)}</div><div class="lbl">Commissions</div></div>
+            <div class="admin-stat-card accent-amber"><div class="num">${s.pending_auctions}</div><div class="lbl">Pending</div></div>
+            <div class="admin-stat-card accent-green"><div class="num">€${s.total_revenue.toFixed(2)}</div><div class="lbl">Revenue</div></div>
+            <div class="admin-stat-card accent-blue"><div class="num">€${s.total_commissions.toFixed(2)}</div><div class="lbl">Commissions</div></div>
           </div>`;
       } catch(e) {
         document.getElementById('adminContent').innerHTML = `<p style="color:var(--red);padding:24px">Failed to load stats. Make sure you're logged in as admin.</p>`;
       }
     }
     // ---------- USERS ----------
+    function adminUserRow(u) {
+      const joined = u.created_at ? new Date(u.created_at).toLocaleDateString('en-US', {month:'short',year:'numeric'}) : '—';
+      return `<tr>
+        <td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
+        <td>${adminBadge(u.status)}</td><td>${joined}</td>
+        <td>
+          <button class="admin-btn admin-btn-green admin-btn-sm" onclick="adminShowConfirm('Activate user?',()=>adminUpdateUserStatus('${u.id}','active'))">Active</button>
+          <button class="admin-btn admin-btn-yellow admin-btn-sm" onclick="adminShowConfirm('Suspend user?',()=>adminUpdateUserStatus('${u.id}','suspended'))">Suspend</button>
+          <button class="admin-btn admin-btn-red admin-btn-sm" onclick="adminShowConfirm('Ban user?',()=>adminUpdateUserStatus('${u.id}','banned'))">Ban</button>
+        </td></tr>`;
+    }
+    function adminFilterUsersTable() {
+      const q = (document.getElementById('userSearch')?.value || '').toLowerCase();
+      const role = document.getElementById('userRoleFilter')?.value || '';
+      const filtered = _adminUsersData.filter(u =>
+        (!q || (u.name + ' ' + u.email).toLowerCase().includes(q)) &&
+        (!role || u.role === role)
+      );
+      const tbody = document.getElementById('usersTbody');
+      if (tbody) tbody.innerHTML = filtered.map(adminUserRow).join('');
+    }
     async function renderAdminUsers() {
       document.getElementById('adminContent').innerHTML = adminLoading('Loading users...');
       try {
-        const users = await adminFetch('/admin/users');
-        if (!users.length) { document.getElementById('adminContent').innerHTML = adminEmpty('No users.'); return; }
-        let html = `<table class="admin-tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>`;
-        users.forEach(u => {
-          html += `<tr>
-            <td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
-            <td>${adminBadge(u.status)}</td>
-            <td>
-              <button class="admin-btn admin-btn-green admin-btn-sm" onclick="adminShowConfirm('Activate ${u.name}?',()=>adminUpdateUserStatus('${u.id}','active'))">Active</button>
-              <button class="admin-btn admin-btn-yellow admin-btn-sm" onclick="adminShowConfirm('Suspend ${u.name}?',()=>adminUpdateUserStatus('${u.id}','suspended'))">Suspend</button>
-              <button class="admin-btn admin-btn-red admin-btn-sm" onclick="adminShowConfirm('Ban ${u.name}?',()=>adminUpdateUserStatus('${u.id}','banned'))">Ban</button>
-            </td></tr>`;
-        });
-        html += '</tbody></table>';
-        document.getElementById('adminContent').innerHTML = html;
+        _adminUsersData = await adminFetch('/admin/users');
+        if (!_adminUsersData.length) { document.getElementById('adminContent').innerHTML = adminEmpty('No users.'); return; }
+        const filterBar = `<div class="admin-search-bar">
+          <input id="userSearch" placeholder="Search name or email..." oninput="adminFilterUsersTable()" style="flex:1;min-width:180px">
+          <select id="userRoleFilter" onchange="adminFilterUsersTable()">
+            <option value="">All roles</option>
+            <option value="buyer">Buyer</option>
+            <option value="seller">Seller</option>
+            <option value="corporate_seller">Corporate Seller</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>`;
+        const rows = _adminUsersData.map(adminUserRow).join('');
+        document.getElementById('adminContent').innerHTML = filterBar + `<div class="admin-tbl-wrap"><table class="admin-tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="usersTbody">${rows}</tbody></table></div>`;
       } catch(e) { document.getElementById('adminContent').innerHTML = `<p style="color:var(--red);padding:24px">Error: ${e.detail || 'API error'}</p>`; }
     }
     async function adminUpdateUserStatus(userId, newStatus) {
@@ -497,27 +523,40 @@
       } catch(e) { adminToast(e.detail || 'Failed to update user', 'error'); }
     }
     // ---------- AUCTIONS ----------
-    async function renderAdminAuctions() {
+    async function renderAdminAuctions(statusFilter) {
+      if (statusFilter !== undefined) currentAuctionFilter = statusFilter;
       document.getElementById('adminContent').innerHTML = adminLoading('Loading auctions...');
       try {
-        const auctions = await adminFetch('/admin/auctions');
-        if (!auctions.length) { document.getElementById('adminContent').innerHTML = adminEmpty('No auctions.'); return; }
-        let html = `<table class="admin-tbl"><thead><tr><th>Title</th><th>Price</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>`;
+        const params = currentAuctionFilter ? `?status=${currentAuctionFilter}` : '';
+        const auctions = await adminFetch(`/admin/auctions${params}`);
+        const filterDefs = [
+          {val:'', label:'All'},
+          {val:'pending_approval', label:'Pending'},
+          {val:'active', label:'Active'},
+          {val:'completed', label:'Completed'},
+          {val:'cancelled', label:'Cancelled'},
+        ];
+        let html = `<div class="admin-pill-filter">` + filterDefs.map(f =>
+          `<button class="${currentAuctionFilter === f.val ? 'active' : ''}" onclick="renderAdminAuctions('${f.val}')">${f.label}</button>`
+        ).join('') + `</div>`;
+        if (!auctions.length) { html += adminEmpty('No auctions.'); document.getElementById('adminContent').innerHTML = html; return; }
+        html += `<div class="admin-tbl-wrap"><table class="admin-tbl"><thead><tr><th>Title</th><th>Price</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>`;
         auctions.forEach(a => {
-          html += `<tr>
+          const isPending = a.status === 'pending_approval';
+          html += `<tr${isPending ? ' class="tr-pending"' : ''}>
             <td>${a.title}${a.is_featured ? '<span class="admin-featured-star">★</span>' : ''}</td>
-            <td>$${(a.current_price || a.start_price).toFixed(2)}</td>
+            <td>€${(a.current_price || a.start_price).toFixed(2)}</td>
             <td>${adminBadge(a.status)}</td>
             <td>${new Date(a.created_at).toLocaleDateString()}</td>
             <td>
-              ${a.status === 'pending_approval' ? `
-                <button class="admin-btn admin-btn-green admin-btn-sm" onclick="adminShowConfirm('Approve ${a.title}?',()=>adminApproveAuction('${a.id}'))">Approve</button>
-                <button class="admin-btn admin-btn-red admin-btn-sm" onclick="adminShowConfirm('Reject ${a.title}?',()=>adminRejectAuction('${a.id}'))">Reject</button>
+              ${isPending ? `
+                <button class="admin-btn admin-btn-green" onclick="adminShowConfirm('Approve auction?',()=>adminApproveAuction('${a.id}'))">Approve</button>
+                <button class="admin-btn admin-btn-red" onclick="adminShowConfirm('Reject auction?',()=>adminRejectAuction('${a.id}'))">Reject</button>
               ` : '<span style="color:#ccc">—</span>'}
-              <button class="admin-btn admin-btn-yellow admin-btn-sm" onclick="adminShowConfirm('${a.is_featured ? 'Unfeature' : 'Feature'} ${a.title}?',()=>adminToggleFeatured('${a.id}',${a.is_featured}))">${a.is_featured ? 'Unfeature' : 'Feature'}</button>
+              <button class="admin-btn admin-btn-yellow admin-btn-sm" onclick="adminShowConfirm('${a.is_featured ? 'Unfeature' : 'Feature'} auction?',()=>adminToggleFeatured('${a.id}',${a.is_featured}))">${a.is_featured ? 'Unfeature' : 'Feature'}</button>
             </td></tr>`;
         });
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         document.getElementById('adminContent').innerHTML = html;
       } catch(e) { document.getElementById('adminContent').innerHTML = `<p style="color:var(--red);padding:24px">Error: ${e.detail || 'API error'}</p>`; }
     }
@@ -550,10 +589,14 @@
         if (!cats.length) { html += adminEmpty('No categories.'); document.getElementById('adminContent').innerHTML = html; return; }
         html += `<table class="admin-tbl"><thead><tr><th>ID</th><th>Name</th><th>Slug</th><th>Status</th><th>Actions</th></tr></thead><tbody>`;
         cats.forEach(c => {
+          const isInactive = c.status === 'inactive';
           html += `<tr>
             <td>${c.id}</td><td>${c.name}</td><td>${c.slug}</td><td>${adminBadge(c.status)}</td>
             <td>
-              <button class="admin-btn admin-btn-red admin-btn-sm" onclick="adminShowConfirm('Deactivate ${c.name}?',()=>adminDeleteCategory(${c.id}))">Deactivate</button>
+              ${isInactive
+                ? `<button class="admin-btn admin-btn-green admin-btn-sm" onclick="adminShowConfirm('Activate category?',()=>adminActivateCategory(${c.id}))">Activate</button>`
+                : `<button class="admin-btn admin-btn-red admin-btn-sm" onclick="adminShowConfirm('Deactivate category?',()=>adminDeleteCategory(${c.id}))">Deactivate</button>`
+              }
             </td></tr>`;
         });
         html += '</tbody></table>';
@@ -564,15 +607,21 @@
       const name = document.getElementById('catName').value.trim();
       const slug = document.getElementById('catSlug').value.trim();
       if (!name || !slug) { adminToast('Name and slug required', 'error'); return; }
-      try { await adminFetch('/admin/categories'); /* POST not possible via GET, use bidmontApi._fetch */ 
+      try {
         await bidmontApi._fetch(`${API_BASE}/admin/categories`, { method: 'POST', body: JSON.stringify({ name, slug }) });
         adminToast('Category created'); renderAdminCategories();
       } catch(e) { adminToast(e.detail || 'Failed', 'error'); }
     }
     async function adminDeleteCategory(id) {
-      try { await adminFetch(`/admin/categories/${id}`); /* DELETE */
+      try {
         await bidmontApi._fetch(`${API_BASE}/admin/categories/${id}`, { method: 'DELETE' });
         adminToast('Category deactivated'); renderAdminCategories();
+      } catch(e) { adminToast(e.detail || 'Failed', 'error'); }
+    }
+    async function adminActivateCategory(id) {
+      try {
+        await bidmontApi._fetch(`${API_BASE}/admin/categories/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'active' }) });
+        adminToast('Category activated'); renderAdminCategories();
       } catch(e) { adminToast(e.detail || 'Failed', 'error'); }
     }
     // ---------- BIDS ----------
@@ -585,7 +634,7 @@
         let html = `<div class="admin-filter-bar"><input class="input" id="bidFilterInput" placeholder="Filter by auction ID" value="${filterAuction||''}" style="min-height:38px;padding:8px 12px" onchange="renderAdminBids(this.value)"></div>`;
         html += `<table class="admin-tbl"><thead><tr><th>Auction</th><th>User</th><th>Amount</th><th>Date</th></tr></thead><tbody>`;
         bids.forEach(b => {
-          html += `<tr><td style="font-family:monospace;font-size:12px">${b.auction_id?.slice(0,8)}...</td><td style="font-family:monospace;font-size:12px">${b.user_id?.slice(0,8)}...</td><td>$${b.amount.toFixed(2)}</td><td>${new Date(b.created_at).toLocaleString()}</td></tr>`;
+          html += `<tr><td style="font-family:monospace;font-size:12px">${b.auction_id?.slice(0,8)}...</td><td style="font-family:monospace;font-size:12px">${b.user_id?.slice(0,8)}...</td><td>€${b.amount.toFixed(2)}</td><td>${new Date(b.created_at).toLocaleString()}</td></tr>`;
         });
         html += '</tbody></table>';
         document.getElementById('adminContent').innerHTML = html;
@@ -635,7 +684,7 @@
           payments.forEach(p => {
             html += `<tr>
               <td style="font-family:monospace;font-size:12px">${(p.auction_id||'').slice(0,8)}...</td>
-              <td>$${p.amount.toFixed(2)}</td>
+              <td>€${p.amount.toFixed(2)}</td>
               <td>${adminBadge(p.status)}</td>
               <td>${new Date(p.created_at).toLocaleDateString()}</td>
               <td>
@@ -655,7 +704,7 @@
           commissions.forEach(c => {
             html += `<tr>
               <td style="font-family:monospace;font-size:12px">${(c.auction_id||'').slice(0,8)}...</td>
-              <td>$${c.amount.toFixed(2)}</td>
+              <td>€${c.amount.toFixed(2)}</td>
               <td>${(c.rate*100).toFixed(0)}%</td>
               <td>${adminBadge(c.status)}</td>
               <td>${new Date(c.created_at).toLocaleDateString()}</td>

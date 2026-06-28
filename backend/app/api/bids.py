@@ -260,6 +260,9 @@ async def my_bids(
             created_at=b.created_at,
             user_name=current_user.name,
             auction_title=b.auction.title if b.auction else None,
+            auction_current_price=b.auction.current_price if b.auction else None,
+            auction_status=b.auction.status.value if b.auction else None,
+            auction_end_time=b.auction.end_time if b.auction else None,
         )
         for b in bids
     ]

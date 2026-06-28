@@ -15,6 +15,9 @@ class BidResponse(BaseModel):
     created_at: datetime
     user_name: str | None = None
     auction_title: str | None = None
+    auction_current_price: float | None = None
+    auction_status: str | None = None
+    auction_end_time: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

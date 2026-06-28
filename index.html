@@ -206,6 +206,11 @@
         <div class="panel">
           <h3 data-i18n="pr.bids">Moje ponude</h3>
           <div class="bid-list" id="myBids"></div>
+          <div id="myWonSection" style="display:none;margin-top:20px">
+            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
+            <h3 data-i18n="pr.won">Osvojene aukcije</h3>
+            <div class="bid-list" id="myWonAuctions"></div>
+          </div>
           <div id="sellerDashboard" style="display:none;margin-top:24px">
             <hr style="border:none;border-top:1px solid var(--line);margin-bottom:18px">
             <h3 data-i18n="pr.seller">Prodavački panel</h3>
@@ -227,6 +232,11 @@
                 <button class="btn primary-btn" style="justify-content:space-between;display:flex" onclick="buyCreditPkg('pro')"><span>Pro — 1000 kredita</span><span>€75</span></button>
               </div>
               <button class="btn" style="margin-top:10px;width:100%" onclick="$('#creditsModal').style.display='none'">Odustani</button>
+            </div>
+            <div style="margin-top:16px">
+              <h4 style="margin-bottom:10px;font-size:14px" data-i18n="pr.mylistings">Moji oglasi</h4>
+              <div id="mySellerListings"></div>
+              <a href="#sell" class="btn dark-btn" style="margin-top:10px;width:100%;display:flex;justify-content:center" data-i18n="pr.newlisting">+ Novi oglas</a>
             </div>
           </div>
         </div>
@@ -742,7 +752,32 @@
         // My bids logic — API first, demo fallback
         let mine=[]; auctions.forEach(a=>(a.bids||[]).forEach(b=>{if(b.name===(user?.name||user?.email||''))mine.push({title:a.title,amount:b.amount})}));
         bids.innerHTML=mine.map(b=>`<div class="bid-item"><span>${b.title}</span><b>${fmt(b.amount)}</b></div>`).join('')||`<p class="meta">${currentLang==='EN'?'No bids yet.':'Još nemate ponuda.'}</p>`;
-        if(bidmontApi.isLoggedIn()){bidmontApi.getMyBids().then(ab=>{if(ab&&ab.length)bids.innerHTML=ab.map(b=>`<div class="bid-item"><span>${b.auction_title||(b.auction_id?.slice(0,8)+'...')}</span><b>${fmt(b.amount)}</b></div>`).join('');}).catch(()=>{});}
+        if(bidmontApi.isLoggedIn()){
+          bidmontApi.getMyBids().then(ab=>{
+            if(ab&&ab.length){
+              // deduplicate: keep highest bid per auction
+              const best={};
+              ab.forEach(b=>{if(!best[b.auction_id]||b.amount>best[b.auction_id].amount)best[b.auction_id]=b;});
+              const uniq=Object.values(best);
+              const smap={active:currentLang==='EN'?'Active':'Aktivan',pending_approval:currentLang==='EN'?'Pending':'Na čekanju',completed:currentLang==='EN'?'Ended':'Završena',cancelled:currentLang==='EN'?'Cancelled':'Otkazana'};
+              bids.innerHTML=uniq.map(b=>{
+                const isWinning=b.auction_current_price!=null&&Math.abs(b.amount-b.auction_current_price)<0.01;
+                const isEnded=b.auction_status==='completed'||b.auction_status==='cancelled';
+                const label=isEnded?(isWinning?(currentLang==='EN'?'Won':'Pobijedio'):(currentLang==='EN'?'Lost':'Izgubio')):(isWinning?(currentLang==='EN'?'Winning':'Vodeći'):(currentLang==='EN'?'Outbid':'Nadmašen'));
+                const color=isWinning?'green':'red';
+                return `<div class="bid-item"><a href="#detail?id=${b.auction_id}" style="flex:1;color:inherit;font-weight:600">${b.auction_title||(b.auction_id?.slice(0,8)+'...')}</a><span class="pill ${color}" style="font-size:11px;padding:3px 8px">${label}</span><b style="white-space:nowrap">${fmt(b.amount)}</b></div>`;
+              }).join('');
+            }
+          }).catch(()=>{});
+          // Won auctions section
+          const userId=apiUser?.id;
+          if(userId){
+            bidmontApi._fetch(`${API_BASE}/auctions?winner_user_id=${userId}&status=completed&limit=10`).then(won=>{
+              const wonSec=$('#myWonSection'),wonList=$('#myWonAuctions');
+              if(won&&won.length&&wonSec&&wonList){wonSec.style.display='block';wonList.innerHTML=won.map(a=>`<div class="bid-item"><a href="#detail?id=${a.id}" style="flex:1;color:inherit;font-weight:600">${a.title}</a><b>${fmt(a.current_price)}</b></div>`).join('');}
+            }).catch(()=>{});
+          }
+        }
         // Seller dashboard
         const dash=$('#sellerDashboard');
         if(dash&&(role==='seller'||role==='corporate_seller')&&bidmontApi.isLoggedIn()){
@@ -753,7 +788,16 @@
             $('#ssCompleted').textContent=s.completed_auctions;
             $('#ssRevenue').textContent=fmt(s.total_revenue);
           }).catch(()=>{});
-          bidmontApi.getCreditsBalance().then(r=>{ $('#creditsBalance').textContent=r.credits_balance??0; }).catch(()=>{});
+          bidmontApi.getCreditsBalance().then(r=>{ $('#creditsBalance').textContent=(r.credits_balance??0)+' kred.'; }).catch(()=>{});
+          bidmontApi._fetch(`${API_BASE}/auctions/my`).then(lst=>{
+            const el=$('#mySellerListings');
+            if(!el)return;
+            if(lst&&lst.length){
+              const smap={active:currentLang==='EN'?'Active':'Aktivan',pending_approval:currentLang==='EN'?'Pending':'Na čekanju',completed:currentLang==='EN'?'Ended':'Završena',cancelled:currentLang==='EN'?'Cancelled':'Otkazana'};
+              const cmap={active:'green',pending_approval:'',completed:'green',cancelled:'red'};
+              el.innerHTML=lst.slice(0,5).map(a=>`<div class="bid-item" style="flex-direction:column;gap:4px;align-items:stretch"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><a href="#detail?id=${a.id}" style="color:inherit;font-weight:600;flex:1">${a.title}</a><span class="pill ${cmap[a.status]||''}" style="font-size:11px;padding:3px 8px;white-space:nowrap">${smap[a.status]||a.status}</span></div><span style="font-size:12px;color:var(--muted)">${fmt(a.current_price)}</span></div>`).join('');
+            }else{el.innerHTML=`<p class="meta" style="font-size:13px">${currentLang==='EN'?'No listings yet.':'Nema oglasa.'}</p>`;}
+          }).catch(()=>{});
           const buyBtn=$('#buyCreditsBtn');
           if(buyBtn) buyBtn.onclick=()=>{ const m=$('#creditsModal'); m.style.display=m.style.display==='none'?'block':'none'; };
         } else if(dash){dash.style.display='none';}
@@ -1067,7 +1111,7 @@
         'r.t': 'Registracija', 'r.d': 'Kreirajte BidMont nalog. Sva polja su obavezna.', 'r.n': 'Ime i prezime / Kompanija', 'r.phone': 'Telefon', 'r.type': 'Tip naloga', 'r.t1': 'Kupac', 'r.t2': 'Prodavac', 'r.t3': 'Osiguravajuća kuća / Flota', 'r.btn': 'Registruj se', 'r.terms': 'Prihvatam Uslove korišćenja *', 'r.privacy': 'Prihvatam Politiku privatnosti *', 'r.marketing': 'Želim da primam promotivne ponude i novosti (opciono)', 'r.confirm': 'Potvrdi lozinku',
         'fpt.t': 'Zaboravili ste lozinku?', 'fpt.d': 'Unesite e-mail adresu i poslaćemo vam link za resetovanje lozinke.', 'fpt.btn': 'Pošalji link za reset', 'fpt.back': '← Nazad na prijavu',
         'rpt.t': 'Resetuj lozinku', 'rpt.d': 'Unesite novu lozinku za vaš nalog.', 'rpt.btn': 'Resetuj lozinku', 'rpt.back': '← Nazad na prijavu',
-        'pr.t': 'Moj nalog', 'pr.d': 'Upravljajte profilom, pregledajte aukcije i ponude.', 'pr.no': 'Niste prijavljeni', 'pr.nod': 'Prijavite se da biste koristili profil.', 'pr.out': 'Odjava', 'pr.bids': 'Moje ponude', 'pr.edit': 'Uredi profil', 'pr.save': 'Sačuvaj izmjene', 'pr.seller': 'Prodavački panel', 'pr.ss.total': 'Ukupno oglasa', 'pr.ss.active': 'Aktivnih', 'pr.ss.done': 'Završenih', 'pr.ss.rev': 'Ukupan prihod',
+        'pr.t': 'Moj nalog', 'pr.d': 'Upravljajte profilom, pregledajte aukcije i ponude.', 'pr.no': 'Niste prijavljeni', 'pr.nod': 'Prijavite se da biste koristili profil.', 'pr.out': 'Odjava', 'pr.bids': 'Moje ponude', 'pr.edit': 'Uredi profil', 'pr.save': 'Sačuvaj izmjene', 'pr.seller': 'Prodavački panel', 'pr.ss.total': 'Ukupno oglasa', 'pr.ss.active': 'Aktivnih', 'pr.ss.done': 'Završenih', 'pr.ss.rev': 'Ukupan prihod', 'pr.won': 'Osvojene aukcije', 'pr.mylistings': 'Moji oglasi', 'pr.newlisting': '+ Novi oglas',
         'a.t': 'Admin pregled', 'a.d': 'Jednostavan demo pregled svih aukcija i trenutnih cijena.', 'a.th1': 'ID', 'a.th2': 'Aukcija', 'a.th3': 'Kategorija', 'a.th4': 'Grad', 'a.th5': 'Cijena', 'a.th6': 'Status',
         'det.loc': 'Lokacija', 'det.time': 'Vrijeme do kraja', 'det.bcount': 'Broj ponuda', 'det.st': 'Status', 'det.sta': 'Aktivna aukcija', 'det.cur': 'Trenutna ponuda', 'det.yb': 'Vaša ponuda (€)', 'det.btn': 'Licitiraj sada', 'det.n': 'Ponuda mora biti veća od trenutne cijene. U demo verziji ponude se čuvaju u browseru.', 'det.hist': 'Istorija ponuda',
         'f.t': 'Online aukcije Crna Gora', 'f.a': 'Admin demo',
@@ -1089,7 +1133,7 @@
         'r.t': 'Registration', 'r.d': 'Create your BidMont account. All fields are required.', 'r.n': 'Full Name / Company', 'r.phone': 'Phone', 'r.type': 'Account Type', 'r.t1': 'Buyer', 'r.t2': 'Seller', 'r.t3': 'Insurance / Fleet', 'r.btn': 'Register', 'r.terms': 'I accept the Terms of Service *', 'r.privacy': 'I accept the Privacy Policy *', 'r.marketing': 'I want to receive promotional offers and news (optional)', 'r.confirm': 'Confirm Password',
         'fpt.t': 'Forgot Password?', 'fpt.d': 'Enter your email address and we will send you a password reset link.', 'fpt.btn': 'Send Reset Link', 'fpt.back': '← Back to Login',
         'rpt.t': 'Reset Password', 'rpt.d': 'Enter a new password for your account.', 'rpt.btn': 'Reset Password', 'rpt.back': '← Back to Login',
-        'pr.t': 'My Account', 'pr.d': 'Manage your profile, view auctions and bids.', 'pr.no': 'Not logged in', 'pr.nod': 'Log in to use the profile.', 'pr.out': 'Logout', 'pr.bids': 'My Bids', 'pr.edit': 'Edit Profile', 'pr.save': 'Save Changes', 'pr.seller': 'Seller Dashboard', 'pr.ss.total': 'Total Listings', 'pr.ss.active': 'Active', 'pr.ss.done': 'Completed', 'pr.ss.rev': 'Total Revenue',
+        'pr.t': 'My Account', 'pr.d': 'Manage your profile, view auctions and bids.', 'pr.no': 'Not logged in', 'pr.nod': 'Log in to use the profile.', 'pr.out': 'Logout', 'pr.bids': 'My Bids', 'pr.edit': 'Edit Profile', 'pr.save': 'Save Changes', 'pr.seller': 'Seller Dashboard', 'pr.ss.total': 'Total Listings', 'pr.ss.active': 'Active', 'pr.ss.done': 'Completed', 'pr.ss.rev': 'Total Revenue', 'pr.won': 'Won Auctions', 'pr.mylistings': 'My Listings', 'pr.newlisting': '+ New Listing',
         'a.t': 'Admin Overview', 'a.d': 'Simple demo overview of all auctions and current prices.', 'a.th1': 'ID', 'a.th2': 'Auction', 'a.th3': 'Category', 'a.th4': 'City', 'a.th5': 'Price', 'a.th6': 'Status',
         'det.loc': 'Location', 'det.time': 'Time Left', 'det.bcount': 'Number of Bids', 'det.st': 'Status', 'det.sta': 'Active Auction', 'det.cur': 'Current Bid', 'det.yb': 'Your Bid (€)', 'det.btn': 'Bid Now', 'det.n': 'Bid must be higher than current price. In demo mode, bids are stored in the browser.', 'det.hist': 'Bid History',
         'f.t': 'Online Auctions Montenegro', 'f.a': 'Admin Demo',

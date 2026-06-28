@@ -117,12 +117,21 @@
 | 17 | `useAuth.tsx` ve `types/index.ts` duplike User interface | `useAuth.tsx` artık `types/index.ts`'i import ediyor (elde yapıldı) |
 | 18 | `auctions.py:54` gereksiz `hasattr` kontrolü | `is_featured is not None` ile değiştirildi |
 
+## 8. Revizyon Geçmişi (28.06.2026)
+
+### ✅ Bu Oturumda Yapılan Düzeltmeler
+| # | Sorun | Çözüm |
+|---|-------|-------|
+| 1 | `renderDetail` TypeError: `$('#detailCity')` null, fiyat/teklif/sayaç render edilmiyordu | `#detailCity` kaldırıldı, şehir `#detailMeta`'ya `city · desc` formatında eklendi |
+| 2 | `#detailStatus` alanı hiç doldurulmuyordu | `renderDetail`'e bitiş zamanına göre "Aktivna/Završena" atandı |
+| 3 | pytest `asyncio_default_fixture_loop_scope` uyarısı | `pytest.ini`'ye eklendi |
+
 ### Devam Eden İyileştirmeler
 | # | Alan | Açıklama |
 |---|------|----------|
-| 1 | Stripe entegrasyonu | `stripe_session_id` alanı var ama gerçek entegrasyon yok |
+| 1 | Stripe entegrasyonu | `stripe_session_id` alanı var ama gerçek entegrasyon yok (API key gerekli) |
 | 2 | WebSocket heartbeat lifecycle | `ws.py`'de heartbeat ilk WS bağlantısında başlıyor, lifespan'a taşınabilir |
-| 3 | Pytest conftest deprecation uyarıları | `event_loop` fixture'ı güncellenmeli, `asyncio_default_fixture_loop_scope` ayarlanmalı |
+| 3 | Pytest third-party uyarıları | `jose` ve `pytest_asyncio`'dan gelen `utcnow()` / `get_event_loop_policy` uyarıları, kütüphane güncellemesi gerektirir |
 | 4 | `.docx` dokümanlar | Git LFS veya markdown dönüşümü önerilir |
 
 ---
@@ -132,4 +141,4 @@
 - ✅ **Admin Panel**: 8 tablı tam yönetim paneli aktif
 - ✅ **WebSocket**: Canlı teklif, heartbeat, online kullanıcı sayısı
 - ✅ **Render deploy**: Otomatik deploy aktif, Docker + PostgreSQL
-- ⚠️ **Küçük hata**: Audit-logs migration eklendi, deploy sonrası düzelecek
+- ✅ **Detail sayfası**: TypeError düzeltildi, fiyat/teklif geçmişi/sayaç artık render ediliyor

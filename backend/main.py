@@ -17,6 +17,7 @@ from sqlalchemy import select
 from fastapi import Depends
 from app.models.domain import Category
 from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, payments_router, support_router, admin_router, notifications_router
+from app.api.credits import credits_router
 from app.api.ws import manager
 
 # Import all models so Base metadata is populated
@@ -90,6 +91,7 @@ app.include_router(payments_router)
 app.include_router(support_router)
 app.include_router(admin_router)
 app.include_router(notifications_router)
+app.include_router(credits_router)
 
 # Mount static files for uploads (before SPA catch-all)
 os.makedirs(UPLOAD_DIR, exist_ok=True)

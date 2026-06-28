@@ -44,6 +44,7 @@ class User(Base):
     marketing_consent = Column(Boolean, default=False, nullable=False)
     reset_token_hash = Column(String, nullable=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
+    credits_balance = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     created_at = Column(DateTime, default=_utcnow)
 
@@ -162,6 +163,21 @@ class Commission(Base):
 
     auction = relationship("Auction")
     seller = relationship("User", foreign_keys=[seller_id])
+
+
+class CreditPurchase(Base):
+    __tablename__ = "credit_purchases"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    credits_amount = Column(Float, nullable=False)
+    amount_eur = Column(Float, nullable=False)
+    stripe_session_id = Column(String, nullable=True)
+    status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class NotificationType(str, enum.Enum):

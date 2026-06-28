@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timezone as dt_timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -60,6 +61,11 @@ async def create_auction(
     if req.end_time <= datetime.now(dt_timezone.utc):
         raise HTTPException(status_code=400, detail="End time must be in the future")
 
+    listing_fee = float(os.getenv("LISTING_FEE_CREDITS", "10"))
+    if (current_user.credits_balance or 0.0) < listing_fee:
+        raise HTTPException(status_code=402, detail="Insufficient credits to post a listing")
+    current_user.credits_balance = (current_user.credits_balance or 0.0) - listing_fee
+
     auction_id = str(uuid.uuid4())
     now = datetime.now(dt_timezone.utc)
 
@@ -86,6 +92,7 @@ async def create_auction(
         serial_number=req.serial_number,
         condition=req.condition,
         location=req.location,
+        listing_fee=listing_fee,
     )
     db.add(auction)
     await db.commit()

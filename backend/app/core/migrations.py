@@ -18,6 +18,7 @@ MISSING_COLUMNS = {
         ("reset_token_hash", "VARCHAR"),
         ("reset_token_expires_at", "TIMESTAMP"),
         ("phone", "VARCHAR"),
+        ("credits_balance", "FLOAT DEFAULT 0"),
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
         ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ],

@@ -59,7 +59,7 @@ class TestCreatePayment:
 
         response = await async_client.post(
             "/api/payments",
-            json={"auction_id": auction.id, "stripe_session_id": "cs_test_123"},
+            json={"auction_id": auction.id},
             headers=_headers_for(winner),
         )
 

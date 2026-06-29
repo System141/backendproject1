@@ -1,4 +1,6 @@
+import hashlib
 import os
+import time as _time
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -17,9 +19,22 @@ PACKAGES = {
     "pro":      {"credits": 1000, "eur": 75},
 }
 
+_MONRI_FORM_URL = {
+    "production": "https://ipg.monri.com/v2/form",
+    "test": "https://ipgtest.monri.com/v2/form",
+}
+
 
 class CheckoutRequest(BaseModel):
     package: str
+
+
+def _monri_digest(merchant_key: str, order_number: str, amount_cents: int, currency: str) -> str:
+    return hashlib.sha512(f"{merchant_key}{order_number}{amount_cents}{currency}".encode()).hexdigest()
+
+
+def _monri_base_url() -> str:
+    return _MONRI_FORM_URL.get(os.getenv("MONRI_ENV", "test"), _MONRI_FORM_URL["test"])
 
 
 @credits_router.get("/balance")
@@ -27,8 +42,8 @@ async def get_balance(current_user: User = Depends(get_current_user)):
     return {"credits_balance": current_user.credits_balance or 0.0}
 
 
-@credits_router.post("/checkout")
-async def create_credit_checkout(
+@credits_router.post("/monri/checkout")
+async def create_monri_credit_checkout(
     req: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -37,95 +52,78 @@ async def create_credit_checkout(
     if not pkg:
         raise HTTPException(400, f"Unknown package. Choose: {', '.join(PACKAGES)}")
 
-    stripe_key = os.getenv("STRIPE_SECRET_KEY")
-    if not stripe_key:
-        raise HTTPException(503, "Stripe not configured. Set STRIPE_SECRET_KEY.")
-
-    import stripe
-    stripe.api_key = stripe_key
+    merchant_key = os.getenv("MONRI_MERCHANT_KEY")
+    authenticity_token = os.getenv("MONRI_AUTHENTICITY_TOKEN")
+    if not merchant_key or not authenticity_token:
+        raise HTTPException(503, "Monri not configured. Set MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN.")
 
     purchase_id = str(uuid.uuid4())
+    order_number = f"cred-{purchase_id[:8]}-{int(_time.time())}"
+    amount_cents = pkg["eur"] * 100
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8000")
-
-    session = stripe.checkout.Session.create(
-        payment_method_types=["card"],
-        line_items=[{
-            "price_data": {
-                "currency": "eur",
-                "product_data": {"name": f"{pkg['credits']} Credits ({req.package})"},
-                "unit_amount": pkg["eur"] * 100,
-            },
-            "quantity": 1,
-        }],
-        mode="payment",
-        success_url=f"{frontend_url}/#profile?credits=success",
-        cancel_url=f"{frontend_url}/#profile",
-        metadata={
-            "type": "credit_purchase",
-            "purchase_id": purchase_id,
-            "user_id": current_user.id,
-            "credits": str(pkg["credits"]),
-        },
-    )
 
     purchase = CreditPurchase(
         id=purchase_id,
         user_id=current_user.id,
         credits_amount=pkg["credits"],
         amount_eur=pkg["eur"],
-        stripe_session_id=session.id,
+        stripe_session_id=order_number,  # ponytail: column kept, stores Monri order_number
         status=PaymentStatus.pending,
     )
     db.add(purchase)
     await db.commit()
 
-    return {"checkout_url": session.url, "session_id": session.id}
+    form_fields = {
+        "authenticity_token": authenticity_token,
+        "order_number": order_number,
+        "amount": str(amount_cents),
+        "currency": "EUR",
+        "transaction_type": "purchase",
+        "order_info": f"{pkg['credits']} Credits ({req.package})",
+        "digest": _monri_digest(merchant_key, order_number, amount_cents, "EUR"),
+        "language": "en",
+        "ch_full_name": (current_user.name or "Buyer")[:30],
+        "ch_email": current_user.email,
+        "ch_address": "N/A",
+        "ch_city": "Podgorica",
+        "ch_zip": "81000",
+        "ch_country": "ME",
+        "ch_phone": "N/A",
+        "success_url_override": f"{frontend_url}/#profile?credits=success",
+        "cancel_url_override": f"{frontend_url}/#profile",
+        "callback_url_override": f"{frontend_url}/api/credits/monri/callback",
+    }
+
+    return {"checkout_url": _monri_base_url(), "form_fields": form_fields}
 
 
-@credits_router.post("/webhook")
-async def stripe_credit_webhook(
+@credits_router.post("/monri/callback")
+async def monri_credit_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
-
-    if not webhook_secret:
-        raise HTTPException(400, "Webhook secret not configured")
-
-    import stripe
-
-    stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
     try:
-        event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
-    except Exception as e:
-        raise HTTPException(400, f"Webhook error: {e}")
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    if event["type"] != "checkout.session.completed":
-        return {"status": "ignored"}
+    order_number = body.get("order_number")
+    if not order_number:
+        raise HTTPException(status_code=400, detail="Missing order_number")
 
-    session = event["data"]["object"]
-    meta = session.get("metadata", {})
-    if meta.get("type") != "credit_purchase":
-        return {"status": "ignored"}
-
-    purchase_id = meta.get("purchase_id")
-    user_id = meta.get("user_id")
-    credits = float(meta.get("credits", 0))
-
-    # Mark purchase completed
-    result = await db.execute(select(CreditPurchase).where(CreditPurchase.id == purchase_id))
+    result = await db.execute(select(CreditPurchase).where(CreditPurchase.stripe_session_id == order_number))
     purchase = result.scalars().first()
-    if purchase and purchase.status != PaymentStatus.completed:
-        purchase.status = PaymentStatus.completed
+    if not purchase:
+        return {"status": "ignored"}
+    if purchase.status == PaymentStatus.completed:
+        return {"status": "already_processed"}
 
-        # Credit the user
-        user_result = await db.execute(select(User).where(User.id == user_id))
+    if body.get("status") == "approved" and body.get("response_code") == "0000":
+        purchase.status = PaymentStatus.completed
+        user_result = await db.execute(select(User).where(User.id == purchase.user_id))
         user = user_result.scalars().first()
         if user:
-            user.credits_balance = (user.credits_balance or 0.0) + credits
-
+            user.credits_balance = (user.credits_balance or 0.0) + purchase.credits_amount
         await db.commit()
 
     return {"status": "ok"}

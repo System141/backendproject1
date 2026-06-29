@@ -1,11 +1,10 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
-from datetime import datetime
 
 
 class PaymentCreateRequest(BaseModel):
     auction_id: str
-    stripe_session_id: Optional[str] = None
+    payment_session_id: Optional[str] = None
 
 
 class PaymentResponse(BaseModel):
@@ -15,7 +14,7 @@ class PaymentResponse(BaseModel):
     amount: float
     buyer_service_fee: Optional[float] = None
     status: str
-    stripe_session_id: Optional[str] = None
+    payment_session_id: Optional[str] = None
     created_at: str
 
     model_config = ConfigDict(from_attributes=True)

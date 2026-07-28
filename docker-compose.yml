@@ -4,10 +4,8 @@ services:
     container_name: bidmont-db
     environment:
       POSTGRES_USER: bidmont
-      POSTGRES_PASSWORD: bidmont-dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: bidmont
-    ports:
-      - "5432:5432"
     volumes:
       - bidmont-pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -23,15 +21,27 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - JWT_SECRET=bidmont-dev-secret-change-in-production
-      - ENVIRONMENT=development
-      - DATABASE_URL=postgresql+asyncpg://bidmont:bidmont-dev@bidmont-db:5432/bidmont
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql+asyncpg://bidmont:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@bidmont-db:5432/bidmont
+      - CORS_ORIGINS=${CORS_ORIGINS:?Set CORS_ORIGINS in .env}
+      - FRONTEND_URL=${FRONTEND_URL:?Set FRONTEND_URL in .env}
+      - MONRI_ENV=${MONRI_ENV:-test}
+      - MONRI_MERCHANT_KEY=${MONRI_MERCHANT_KEY:-}
+      - MONRI_AUTHENTICITY_TOKEN=${MONRI_AUTHENTICITY_TOKEN:-}
+      - SEED_SECRET=${SEED_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@bidmont.com}
     depends_on:
       bidmont-db:
         condition: service_healthy
     volumes:
-      - ./backend:/app/backend
+      - bidmont-uploads:/app/backend/uploads
     restart: unless-stopped
 
 volumes:
   bidmont-pgdata:
+  bidmont-uploads:

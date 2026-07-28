@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base
 # Otherwise default to SQLite (local development).
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bidmont.db")
 
-# If the DATABASE_URL is a plain postgres:// (Render-style), add +asyncpg driver
+# If DATABASE_URL is a plain postgres:// URL, add the +asyncpg driver
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 elif DATABASE_URL.startswith("postgresql://") and "+" not in DATABASE_URL:

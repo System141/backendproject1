@@ -15,10 +15,10 @@ COPY index.html /app/index.html
 # Expose the port
 EXPOSE 8000
 
-# Environment variables for production (override in Render dashboard)
+# Environment variables for production (override at container runtime)
 # WARNING: JWT_SECRET must be supplied via runtime environment — never hardcode secrets!
 ENV ENVIRONMENT="production"
-ENV CORS_ORIGINS="https://bidmont.onrender.com"
+ENV CORS_ORIGINS=""
 
 # Run the application from the backend directory
 WORKDIR /app/backend

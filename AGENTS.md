@@ -4,7 +4,7 @@
 
 BidMont is a FastAPI backend that serves both the API and a Single-Page Application (SPA). Backend code lives in `backend/`: `main.py` creates the app, `app/api/` contains routes, `app/models/` SQLAlchemy models, `app/schemas/` Pydantic schemas, `app/core/` infrastructure, `app/services/` helpers (including shared business logic in `app/services/auctions.py`), and `app/core/migrations.py` for unified auto-migration. Backend tests are under `backend/tests/unit/` and `backend/tests/integration/`.
 
-The frontend is an SPA served from the backend root route via `index.html` (located at project root). A legacy Next.js frontend is archived at `docs/legacy/frontend-nextjs/`. Deployment files are `Dockerfile`, `docker-compose.yml`, and `render.yaml`; documentation is in `docs/`.
+The frontend is an SPA served from the backend root route via `index.html` (located at project root). A legacy Next.js frontend is archived at `docs/legacy/frontend-nextjs/`. Deployment files are `Dockerfile` and `docker-compose.yml`; documentation is in `docs/`.
 
 **Key service modules:**
 - `app/services/auctions.py` — shared `finalize_auction()` (used by REST + scheduler) and `build_auction_response()`
@@ -33,8 +33,12 @@ Pytest is the backend test runner, with `pytest-asyncio` enabled automatically. 
 
 ## Commit & Pull Request Guidelines
 
-Recent history mixes short phase labels and imperative summaries. Prefer imperative commits such as `Add auction bid validation tests` or `Fix Docker CMD syntax`. For pull requests, include a description, test results, linked issue when applicable, and screenshots for frontend-visible changes. Call out impacts involving `DATABASE_URL`, `JWT_SECRET`, CORS, Docker, or Render settings.
+Recent history mixes short phase labels and imperative summaries. Prefer imperative commits such as `Add auction bid validation tests` or `Fix Docker CMD syntax`. For pull requests, include a description, test results, linked issue when applicable, and screenshots for frontend-visible changes. Call out impacts involving `DATABASE_URL`, `JWT_SECRET`, CORS, or Docker settings.
 
 ## Security & Configuration Tips
 
 Do not commit real secrets. `JWT_SECRET` must never be hardcoded in `Dockerfile` — supply through runtime environment. Production values for `JWT_SECRET`, `DATABASE_URL`, `CORS_ORIGINS` should be supplied through the runtime environment. The `forgot-password` endpoint hashes reset tokens and only returns them in `development` mode.
+
+## Deployment Targets
+
+- **Private Linux server via Docker** (primary demo, `Dockerfile` + `docker-compose.yml`): persistent process, local disk uploads, in-process WebSocket broadcast, continuous background scheduler (`app/core/scheduler.py`). No extra config needed beyond `JWT_SECRET`, `DATABASE_URL`, `CORS_ORIGINS` in the runtime environment.

@@ -70,7 +70,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS – tightened for production
 CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
-    "https://bidmont.onrender.com,http://localhost:8000,http://localhost:3000",
+    "http://localhost:8000,http://localhost:3000",
 ).split(",")
 app.add_middleware(
     CORSMiddleware,

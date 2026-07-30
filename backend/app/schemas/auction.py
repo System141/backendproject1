@@ -11,6 +11,10 @@ class AuctionCreateRequest(BaseModel):
     start_price: float = Field(..., gt=0)
     min_increment: float = Field(..., gt=0)
     end_time: datetime = Field(...)
+    # Doc §11.7: seller confirms listing authority/accuracy/known-defects
+    # disclosure before submission. Server stores the acceptance timestamp
+    # via TermsAcceptance (document_type="seller_listing_declaration").
+    declaration_accepted: bool = Field(..., description="Seller confirms authority to list and accuracy of listing info")
 
     # Vehicle fields (optional)
     brand: Optional[str] = Field(None, max_length=100)
@@ -78,6 +82,10 @@ class AuctionResponse(BaseModel):
     status: str
     winner_user_id: Optional[str] = None
     is_featured: bool = False
+    lot_code: Optional[str] = None
+    participation_credit_cost: Optional[float] = None
+    review_notes: Optional[str] = None
+    contact_flagged: bool = False
     created_at: datetime
 
     # Vehicle fields
@@ -114,4 +122,12 @@ class AuctionDetailResponse(AuctionResponse):
 
 # ---------- Admin status update ----------
 class AuctionStatusUpdate(BaseModel):
-    status: str = Field(..., pattern=r"^(active|cancelled)$")
+    status: str = Field(..., pattern=r"^(live|cancelled)$")
+
+
+# ---------- Post-close contact unlock (doc §12.5, §5.11 - AC-11/AC-12) ----------
+class ContactInfoResponse(BaseModel):
+    role: str  # "seller" or "winner" - whose contact this is
+    name: str
+    email: str
+    phone: Optional[str] = None

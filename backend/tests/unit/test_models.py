@@ -166,7 +166,7 @@ class TestAuctionModel:
         await db_session.refresh(auction)
 
         assert auction.title == "Test Auction"
-        assert auction.status == AuctionStatus.pending_approval  # default
+        assert auction.status == AuctionStatus.under_review  # default
         assert auction.start_price == 100.0
 
 

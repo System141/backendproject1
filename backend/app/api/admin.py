@@ -1,24 +1,36 @@
 """Admin panel API endpoints. Requires admin role."""
+import os
 import uuid
 import logging
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, desc, asc, func, text
 
 from app.core.database import get_db
-from app.core.security import get_current_admin, hash_password, create_access_token
+from app.core.security import get_current_admin, get_current_staff, hash_password, create_access_token
 from app.core.migrations import run_migration_raw
 from app.models.domain import (
-    User, UserRole, Auction, AuctionStatus, Bid, Payment, Commission, SupportTicket,
-    Category, AuditLog,
+    User, UserRole, Auction, AuctionStatus, BIDDABLE_STATUSES, Bid, CreditPurchase, PaymentStatus, SupportTicket,
+    Category, AuditLog, CreditPackage, BidIncrementRule, PlatformSettings, AuctionParticipant,
+    CreditLedgerType, TermsDocument, SellerProfile, SellerVerificationStatus, _utcnow,
 )
 from app.schemas.auth import UserResponse, TokenResponse
 from app.schemas.auction import AuctionResponse
 from app.schemas.bid import BidResponse
 from app.schemas.category import CategoryResponse, CategoryCreate, CategoryUpdate
-from app.schemas.payment import PaymentResponse, CommissionResponse
+from app.schemas.credit import (
+    CreditPackageResponse, CreditPackageCreate, CreditPackageUpdate,
+    BidIncrementRuleResponse, BidIncrementRuleCreate, BidIncrementRuleUpdate,
+    PlatformSettingsResponse, PlatformSettingsUpdate,
+    CreditAdjustRequest, CreditLedgerEntryResponse, ReasonRequest,
+)
 from app.schemas.support import SupportTicketResponse
+from app.schemas.legal import TermsDocumentResponse, TermsDocumentCreate
+from app.schemas.seller import SellerProfileResponse
+from app.services.auctions import build_auction_response, get_or_create_settings
+from app.services.credits import apply_ledger_entry
+from app.services.notifications import send_notification, NotificationType
 
 logger = logging.getLogger("bidmont")
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -36,6 +48,13 @@ async def _log_audit(db: AsyncSession, admin_id: str, action: str, entity_type: 
     )
     db.add(log)
     await db.commit()
+
+
+def _diff_summary(obj, update_data: dict) -> str:
+    """Doc §17.2: audit entries need a before/after summary, not just which
+    fields changed. Call BEFORE applying update_data's values to obj."""
+    parts = [f"{field}: {getattr(obj, field)!r}->{value!r}" for field, value in update_data.items()]
+    return "; ".join(parts) if parts else "(no fields changed)"
 
 
 # ---- Seed Admin (first-run only, uses raw SQL) ----
@@ -143,11 +162,12 @@ async def admin_update_user_status(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    old_status = user.status
     user.status = new_status
     await db.commit()
     await db.refresh(user)
 
-    await _log_audit(db, current_user.id, "update_user_status", "user", user_id, f"Status changed to {new_status}")
+    await _log_audit(db, current_user.id, "update_user_status", "user", user_id, f"status: {old_status!r}->{new_status!r}")
 
     return UserResponse(
         id=user.id,
@@ -210,13 +230,14 @@ async def admin_update_category(
         raise HTTPException(status_code=404, detail="Category not found")
 
     update_data = req.model_dump(exclude_unset=True)
+    summary = _diff_summary(category, update_data)
     for field, value in update_data.items():
         setattr(category, field, value)
 
     await db.commit()
     await db.refresh(category)
 
-    await _log_audit(db, current_user.id, "update_category", "category", str(category_id), f"Updated category fields: {list(update_data.keys())}")
+    await _log_audit(db, current_user.id, "update_category", "category", str(category_id), summary)
     return category
 
 
@@ -238,6 +259,282 @@ async def admin_delete_category(
     await _log_audit(db, current_user.id, "delete_category", "category", str(category_id), f"Deactivated category '{category.name}'")
 
 
+# ===================== CREDIT PACKAGES =====================
+@admin_router.get("/credit-packages", response_model=list[CreditPackageResponse])
+async def admin_list_credit_packages(
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all credit packages (including inactive). Admin only."""
+    result = await db.execute(select(CreditPackage).order_by(asc(CreditPackage.sort_order)))
+    return result.scalars().all()
+
+
+@admin_router.post("/credit-packages", response_model=CreditPackageResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_credit_package(
+    req: CreditPackageCreate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a credit package. Admin only."""
+    package = CreditPackage(
+        id=str(uuid.uuid4()),
+        name=req.name,
+        credits=req.credits,
+        price_eur=req.price_eur,
+        active=req.active,
+        sort_order=req.sort_order,
+    )
+    db.add(package)
+    await db.commit()
+    await db.refresh(package)
+
+    await _log_audit(db, current_user.id, "create_credit_package", "credit_package", package.id, f"Created package '{req.name}'")
+    return package
+
+
+@admin_router.put("/credit-packages/{package_id}", response_model=CreditPackageResponse)
+async def admin_update_credit_package(
+    package_id: str,
+    req: CreditPackageUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a credit package. Admin only."""
+    result = await db.execute(select(CreditPackage).where(CreditPackage.id == package_id))
+    package = result.scalars().first()
+    if not package:
+        raise HTTPException(status_code=404, detail="Credit package not found")
+
+    update_data = req.model_dump(exclude_unset=True)
+    summary = _diff_summary(package, update_data)
+    for field, value in update_data.items():
+        setattr(package, field, value)
+
+    await db.commit()
+    await db.refresh(package)
+
+    await _log_audit(db, current_user.id, "update_credit_package", "credit_package", package_id, summary)
+    return package
+
+
+# ===================== BID INCREMENT RULES =====================
+@admin_router.get("/bid-increment-rules", response_model=list[BidIncrementRuleResponse])
+async def admin_list_bid_increment_rules(
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List bid increment rules. Admin only."""
+    result = await db.execute(select(BidIncrementRule).order_by(asc(BidIncrementRule.min_price)))
+    return result.scalars().all()
+
+
+@admin_router.post("/bid-increment-rules", response_model=BidIncrementRuleResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_bid_increment_rule(
+    req: BidIncrementRuleCreate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a bid increment rule (min_price threshold -> increment). Admin only."""
+    rule = BidIncrementRule(min_price=req.min_price, increment=req.increment, sort_order=req.sort_order)
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+
+    await _log_audit(db, current_user.id, "create_bid_increment_rule", "bid_increment_rule", str(rule.id), f"min_price={req.min_price} increment={req.increment}")
+    return rule
+
+
+@admin_router.put("/bid-increment-rules/{rule_id}", response_model=BidIncrementRuleResponse)
+async def admin_update_bid_increment_rule(
+    rule_id: int,
+    req: BidIncrementRuleUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a bid increment rule. Admin only."""
+    result = await db.execute(select(BidIncrementRule).where(BidIncrementRule.id == rule_id))
+    rule = result.scalars().first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Bid increment rule not found")
+
+    update_data = req.model_dump(exclude_unset=True)
+    summary = _diff_summary(rule, update_data)
+    for field, value in update_data.items():
+        setattr(rule, field, value)
+
+    await db.commit()
+    await db.refresh(rule)
+
+    await _log_audit(db, current_user.id, "update_bid_increment_rule", "bid_increment_rule", str(rule_id), summary)
+    return rule
+
+
+@admin_router.delete("/bid-increment-rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_bid_increment_rule(
+    rule_id: int,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a bid increment rule. Admin only."""
+    result = await db.execute(select(BidIncrementRule).where(BidIncrementRule.id == rule_id))
+    rule = result.scalars().first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Bid increment rule not found")
+
+    await db.delete(rule)
+    await db.commit()
+
+    await _log_audit(db, current_user.id, "delete_bid_increment_rule", "bid_increment_rule", str(rule_id), None)
+
+
+# ===================== PLATFORM SETTINGS =====================
+@admin_router.get("/settings", response_model=PlatformSettingsResponse)
+async def admin_get_settings(
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get anti-sniping / default participation-cost settings. Admin only."""
+    return await get_or_create_settings(db)
+
+
+@admin_router.put("/settings", response_model=PlatformSettingsResponse)
+async def admin_update_settings(
+    req: PlatformSettingsUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update anti-sniping / default participation-cost settings. Admin only."""
+    settings = await get_or_create_settings(db)
+    update_data = req.model_dump(exclude_unset=True)
+    summary = _diff_summary(settings, update_data)
+    for field, value in update_data.items():
+        setattr(settings, field, value)
+
+    await db.commit()
+    await db.refresh(settings)
+
+    await _log_audit(db, current_user.id, "update_settings", "platform_settings", "1", summary)
+    return settings
+
+
+# ===================== CREDIT LEDGER / ADJUSTMENTS =====================
+@admin_router.post("/credits/adjust", response_model=CreditLedgerEntryResponse)
+async def admin_adjust_credits(
+    req: CreditAdjustRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually adjust a user's credit balance. Reason is mandatory and audit-logged."""
+    result = await db.execute(select(User).where(User.id == req.user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    entry = await apply_ledger_entry(
+        db, user, req.amount, CreditLedgerType.admin_adjust,
+        reference=None, reason=req.reason, actor_id=current_user.id,
+    )
+    await db.commit()
+    await db.refresh(entry)
+
+    await _log_audit(db, current_user.id, "adjust_credits", "user", user.id, f"{req.amount:+.2f} credits: {req.reason}")
+    return entry
+
+
+# ===================== SELLER APPLICATIONS =====================
+@admin_router.get("/sellers", response_model=list[SellerProfileResponse])
+async def admin_list_seller_applications(
+    verification_status: str | None = Query(None, description="Filter by pending/verified/rejected"),
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List seller applications (doc §11.3/§17). Admin only."""
+    query = select(SellerProfile).order_by(desc(SellerProfile.created_at))
+    if verification_status:
+        query = query.where(SellerProfile.verification_status == SellerVerificationStatus(verification_status))
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@admin_router.post("/sellers/{profile_id}/verify", response_model=SellerProfileResponse)
+async def admin_verify_seller(
+    profile_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Approve a seller application. Also promotes the user's role to 'seller'
+    if they registered as a buyer - role alone (doc's existing self-declared
+    seller/corporate_seller registration) is not enough to publish LIVE
+    listings without this verification (doc §11.1/§11.5).
+    """
+    result = await db.execute(select(SellerProfile).where(SellerProfile.id == profile_id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Seller application not found")
+    if profile.verification_status == SellerVerificationStatus.verified:
+        raise HTTPException(status_code=400, detail="Already verified")
+
+    profile.verification_status = SellerVerificationStatus.verified
+    profile.rejection_reason = None
+    profile.reviewed_by = current_user.id
+    profile.reviewed_at = _utcnow()
+
+    user_result = await db.execute(select(User).where(User.id == profile.user_id))
+    user = user_result.scalars().first()
+    if user and user.role not in (UserRole.seller, UserRole.corporate_seller):
+        user.role = UserRole.corporate_seller if profile.account_type == "company" else UserRole.seller
+
+    await db.commit()
+    await db.refresh(profile)
+
+    await send_notification(
+        db, profile.user_id, NotificationType.seller_verified,
+        "Seller application approved",
+        "Your seller application has been verified. You can now create listings.",
+        send_email=True,
+        title_me="Prijava za prodavca odobrena",
+        message_me="Vaša prijava za prodavca je verifikovana. Sada možete kreirati oglase.",
+    )
+    await _log_audit(db, current_user.id, "verify_seller", "seller_profile", profile.id, f"user {profile.user_id} verified")
+    return profile
+
+
+@admin_router.post("/sellers/{profile_id}/reject", response_model=SellerProfileResponse)
+async def admin_reject_seller(
+    profile_id: str,
+    req: ReasonRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a seller application. Reason is mandatory and audit-logged."""
+    result = await db.execute(select(SellerProfile).where(SellerProfile.id == profile_id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Seller application not found")
+    if profile.verification_status == SellerVerificationStatus.verified:
+        raise HTTPException(status_code=400, detail="Already verified - cannot reject")
+
+    profile.verification_status = SellerVerificationStatus.rejected
+    profile.rejection_reason = req.reason
+    profile.reviewed_by = current_user.id
+    profile.reviewed_at = _utcnow()
+    await db.commit()
+    await db.refresh(profile)
+
+    await send_notification(
+        db, profile.user_id, NotificationType.seller_rejected,
+        "Seller application rejected",
+        f"Your seller application was rejected: {req.reason}",
+        send_email=True,
+        title_me="Prijava za prodavca odbijena",
+        message_me=f"Vaša prijava za prodavca je odbijena: {req.reason}",
+    )
+    await _log_audit(db, current_user.id, "reject_seller", "seller_profile", profile.id, req.reason)
+    return profile
+
+
 # ===================== AUCTIONS =====================
 @admin_router.get("/auctions", response_model=list[AuctionResponse])
 async def admin_list_auctions(
@@ -249,7 +546,11 @@ async def admin_list_auctions(
     """List all auctions. Admin only."""
     from sqlalchemy.orm import selectinload
 
-    query = select(Auction).options(selectinload(Auction.images)).order_by(desc(Auction.created_at))
+    query = (
+        select(Auction)
+        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .order_by(desc(Auction.created_at))
+    )
     if status:
         query = query.where(Auction.status == AuctionStatus(status))
     if featured is not None:
@@ -258,36 +559,7 @@ async def admin_list_auctions(
     result = await db.execute(query)
     auctions = result.scalars().all()
 
-    def build(a):
-        return AuctionResponse(
-            id=a.id,
-            seller_id=a.seller_id,
-            category_id=a.category_id,
-            title=a.title,
-            description=a.description,
-            start_price=a.start_price,
-            current_price=a.current_price,
-            min_increment=a.min_increment,
-            start_time=a.start_time,
-            end_time=a.end_time,
-            status=a.status.value,
-            winner_user_id=a.winner_user_id,
-            is_featured=bool(a.is_featured) if hasattr(a, 'is_featured') else False,
-            created_at=a.created_at,
-            brand=a.brand,
-            model=a.model,
-            year=a.year,
-            mileage=a.mileage,
-            fuel_type=a.fuel_type,
-            transmission=a.transmission,
-            damage_status=a.damage_status,
-            equipment_brand=a.equipment_brand,
-            serial_number=a.serial_number,
-            condition=a.condition,
-            location=a.location,
-        )
-
-    return [build(a) for a in auctions]
+    return [build_auction_response(a) for a in auctions]
 
 
 @admin_router.put("/auctions/{auction_id}/featured", response_model=AuctionResponse)
@@ -301,7 +573,9 @@ async def admin_toggle_featured(
     from sqlalchemy.orm import selectinload
 
     result = await db.execute(
-        select(Auction).options(selectinload(Auction.images)).where(Auction.id == auction_id)
+        select(Auction)
+        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .where(Auction.id == auction_id)
     )
     auction = result.scalars().first()
     if not auction:
@@ -309,37 +583,71 @@ async def admin_toggle_featured(
 
     auction.is_featured = is_featured
     await db.commit()
-    await db.refresh(auction)
+    await db.refresh(auction, attribute_names=["is_featured"])
 
     await _log_audit(db, current_user.id, "toggle_featured", "auction", auction_id, f"Featured set to {is_featured}")
 
-    return AuctionResponse(
-        id=auction.id,
-        seller_id=auction.seller_id,
-        category_id=auction.category_id,
-        title=auction.title,
-        description=auction.description,
-        start_price=auction.start_price,
-        current_price=auction.current_price,
-        min_increment=auction.min_increment,
-        start_time=auction.start_time,
-        end_time=auction.end_time,
-        status=auction.status.value,
-        winner_user_id=auction.winner_user_id,
-        is_featured=bool(auction.is_featured) if hasattr(auction, 'is_featured') else False,
-        created_at=auction.created_at,
-        brand=auction.brand,
-        model=auction.model,
-        year=auction.year,
-        mileage=auction.mileage,
-        fuel_type=auction.fuel_type,
-        transmission=auction.transmission,
-        damage_status=auction.damage_status,
-        equipment_brand=auction.equipment_brand,
-        serial_number=auction.serial_number,
-        condition=auction.condition,
-        location=auction.location,
+    return build_auction_response(auction)
+
+
+@admin_router.post("/auctions/{auction_id}/cancel", response_model=AuctionResponse)
+async def admin_cancel_auction(
+    auction_id: str,
+    req: ReasonRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cancel a pending/active auction and reverse participation credits for
+    everyone who joined it. Reason is mandatory and audit-logged. Reversal
+    is a new +credit ledger entry, never an edit to the original spend.
+    """
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(Auction)
+        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .where(Auction.id == auction_id)
     )
+    auction = result.scalars().first()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    if auction.status not in (AuctionStatus.draft, AuctionStatus.under_review, AuctionStatus.upcoming) + BIDDABLE_STATUSES:
+        raise HTTPException(status_code=400, detail="Only not-yet-ended auctions can be cancelled")
+
+    auction.status = AuctionStatus.cancelled
+
+    participants_result = await db.execute(
+        select(AuctionParticipant).where(AuctionParticipant.auction_id == auction_id)
+    )
+    participants = participants_result.scalars().all()
+    for participant in participants:
+        user_result = await db.execute(select(User).where(User.id == participant.user_id))
+        participant_user = user_result.scalars().first()
+        if participant_user:
+            await apply_ledger_entry(
+                db, participant_user, participant.credits_spent, CreditLedgerType.reversal,
+                reference=auction_id, reason=req.reason, actor_id=current_user.id,
+            )
+
+    await db.commit()
+    await db.refresh(auction, attribute_names=["status"])
+
+    for participant in participants:
+        await send_notification(
+            db, participant.user_id,
+            NotificationType.auction_cancelled,
+            f"Auction cancelled: {auction.title}",
+            f"'{auction.title}' was cancelled by the admin. Your {participant.credits_spent:.0f} participation credits have been reversed.",
+            auction_id=auction_id,
+            send_email=True,
+            title_me=f"Aukcija otkazana: {auction.title}",
+            message_me=f"'{auction.title}' je otkazana od strane administratora. Vaših {participant.credits_spent:.0f} kredita za učešće je vraćeno.",
+        )
+
+    await _log_audit(db, current_user.id, "cancel_auction", "auction", auction_id, req.reason)
+
+    return build_auction_response(auction)
 
 
 # ===================== BIDS =====================
@@ -372,14 +680,64 @@ async def admin_list_bids(
     ]
 
 
+@admin_router.post("/bids/{bid_id}/invalidate", response_model=BidResponse)
+async def admin_invalidate_bid(
+    bid_id: str,
+    req: ReasonRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Mark a bid invalid (never deleted). Reason mandatory and audit-logged.
+    If this was the highest valid bid, the auction's current_price is
+    recomputed from the remaining valid bids.
+    """
+    result = await db.execute(select(Bid).where(Bid.id == bid_id))
+    bid = result.scalars().first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="Bid not found")
+    if bid.invalidated:
+        raise HTTPException(status_code=400, detail="Bid is already invalidated")
+
+    bid.invalidated = True
+    bid.invalidated_reason = req.reason
+    bid.invalidated_by = current_user.id
+    bid.invalidated_at = _utcnow()
+
+    auction_result = await db.execute(select(Auction).where(Auction.id == bid.auction_id).with_for_update())
+    auction = auction_result.scalars().first()
+    if auction:
+        highest_result = await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == auction.id, Bid.invalidated == False, Bid.id != bid.id)  # noqa: E712
+            .order_by(desc(Bid.amount), asc(Bid.created_at))
+            .limit(1)
+        )
+        highest = highest_result.scalars().first()
+        auction.current_price = highest.amount if highest else auction.start_price
+
+    await db.commit()
+    await db.refresh(bid)
+
+    await _log_audit(db, current_user.id, "invalidate_bid", "bid", bid_id, req.reason)
+
+    return BidResponse(
+        id=bid.id,
+        auction_id=bid.auction_id,
+        user_id=bid.user_id,
+        amount=bid.amount,
+        created_at=bid.created_at,
+    )
+
+
 # ===================== SUPPORT TICKETS =====================
 @admin_router.get("/support-tickets", response_model=list[SupportTicketResponse])
 async def admin_list_tickets(
     status: str | None = Query(None, description="Filter by status"),
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(get_current_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all support tickets with optional status filter. Admin only."""
+    """List all support tickets with optional status filter. Staff (admin/super_admin/support)."""
     query = select(SupportTicket).order_by(desc(SupportTicket.created_at))
     if status:
         query = query.where(SupportTicket.status == status)
@@ -392,6 +750,8 @@ async def admin_list_tickets(
             user_id=t.user_id or "",
             subject=t.subject,
             message=t.message,
+            category=t.category,
+            lot_code=t.lot_code,
             status=t.status,
             created_at=str(t.created_at) if t.created_at else "",
             updated_at=str(t.updated_at) if t.updated_at else "",
@@ -404,62 +764,90 @@ async def admin_list_tickets(
 async def admin_update_ticket(
     ticket_id: str,
     new_status: str = Query(..., pattern=r"^(open|in_progress|resolved|closed)$"),
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(get_current_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update support ticket status. Admin only."""
+    """Update support ticket status. Staff (admin/super_admin/support)."""
     result = await db.execute(select(SupportTicket).where(SupportTicket.id == ticket_id))
     ticket = result.scalars().first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
+    old_status = ticket.status
     ticket.status = new_status
     await db.commit()
     await db.refresh(ticket)
 
-    await _log_audit(db, current_user.id, "update_ticket", "support_ticket", ticket_id, f"Status changed to {new_status}")
+    await _log_audit(db, current_user.id, "update_ticket", "support_ticket", ticket_id, f"status: {old_status!r}->{new_status!r}")
 
     return SupportTicketResponse(
         id=ticket.id,
         user_id=ticket.user_id or "",
         subject=ticket.subject,
         message=ticket.message,
+        category=ticket.category,
+        lot_code=ticket.lot_code,
         status=ticket.status,
         created_at=str(ticket.created_at) if ticket.created_at else "",
         updated_at=str(ticket.updated_at) if ticket.updated_at else "",
     )
 
 
-# ===================== COMMISSIONS =====================
-@admin_router.put("/commissions/{commission_id}/status", response_model=CommissionResponse)
-async def admin_update_commission_status(
-    commission_id: str,
-    new_status: str = Query(..., pattern=r"^(pending|completed|failed|refunded)$"),
+# ===================== LEGAL DOCUMENTS =====================
+@admin_router.get("/legal", response_model=list[TermsDocumentResponse])
+async def admin_list_legal_documents(
+    document_type: str | None = Query(None, description="Filter by document type"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update commission status. Admin only."""
-    result = await db.execute(select(Commission).where(Commission.id == commission_id))
-    commission = result.scalars().first()
-    if not commission:
-        raise HTTPException(status_code=404, detail="Commission not found")
+    """List all legal document versions (doc §15/§17 - legal document version
+    management). Admin only."""
+    query = select(TermsDocument).order_by(desc(TermsDocument.created_at))
+    if document_type:
+        query = query.where(TermsDocument.document_type == document_type)
+    result = await db.execute(query)
+    return result.scalars().all()
 
-    from app.models.domain import PaymentStatus
-    commission.status = PaymentStatus(new_status)
-    await db.commit()
-    await db.refresh(commission)
 
-    await _log_audit(db, current_user.id, "update_commission_status", "commission", commission_id, f"Status changed to {new_status}")
+@admin_router.post("/legal", response_model=TermsDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_legal_document(
+    req: TermsDocumentCreate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Publish a new version of a legal document. Rows are never edited or
+    deleted - a new version is a new row, and activating it deactivates any
+    previously active version of the same type so GET /api/legal/{type}
+    always resolves to exactly one document.
+    """
+    if req.is_active:
+        prior = await db.execute(
+            select(TermsDocument).where(
+                TermsDocument.document_type == req.document_type,
+                TermsDocument.is_active == True,  # noqa: E712
+            )
+        )
+        for doc in prior.scalars().all():
+            doc.is_active = False
 
-    return CommissionResponse(
-        id=commission.id,
-        auction_id=commission.auction_id,
-        seller_id=commission.seller_id,
-        amount=commission.amount,
-        rate=commission.rate,
-        status=commission.status.value if hasattr(commission.status, 'value') else str(commission.status),
-        created_at=str(commission.created_at) if commission.created_at else "",
+    document = TermsDocument(
+        id=str(uuid.uuid4()),
+        document_type=req.document_type,
+        version=req.version,
+        content=req.content,
+        is_active=req.is_active,
     )
+    db.add(document)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=f"Version {req.version} of {req.document_type} already exists")
+    await db.refresh(document)
+
+    await _log_audit(db, current_user.id, "create_legal_document", "terms_document", document.id, f"{req.document_type} v{req.version}")
+    return document
 
 
 # ===================== AUDIT LOGS =====================
@@ -511,33 +899,26 @@ async def admin_stats(
     total_bids = result.scalar()
 
     result = await db.execute(
-        select(func.count(Auction.id)).where(Auction.status == AuctionStatus.active)
+        select(func.count(Auction.id)).where(Auction.status.in_(BIDDABLE_STATUSES))
     )
     active_auctions = result.scalar()
 
     result = await db.execute(
-        select(func.count(Auction.id)).where(Auction.status == AuctionStatus.completed)
+        select(func.count(Auction.id)).where(Auction.status == AuctionStatus.ended)
     )
     completed_auctions = result.scalar()
 
     result = await db.execute(
-        select(func.count(Auction.id)).where(Auction.status == AuctionStatus.pending_approval)
+        select(func.count(Auction.id)).where(Auction.status == AuctionStatus.under_review)
     )
     pending_auctions = result.scalar()
 
     result = await db.execute(
-        select(func.coalesce(func.sum(Payment.amount), 0)).where(
-            Payment.status == "completed"
+        select(func.coalesce(func.sum(CreditPurchase.amount_eur), 0)).where(
+            CreditPurchase.status == PaymentStatus.completed
         )
     )
-    total_revenue = float(result.scalar())
-
-    result = await db.execute(
-        select(func.coalesce(func.sum(Commission.amount), 0)).where(
-            Commission.status == "completed"
-        )
-    )
-    total_commissions = float(result.scalar())
+    total_credit_revenue = float(result.scalar())
 
     return {
         "total_users": total_users,
@@ -546,6 +927,5 @@ async def admin_stats(
         "active_auctions": active_auctions,
         "completed_auctions": completed_auctions,
         "pending_auctions": pending_auctions,
-        "total_revenue": total_revenue,
-        "total_commissions": total_commissions,
+        "total_credit_revenue": total_credit_revenue,
     }

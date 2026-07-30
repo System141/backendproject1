@@ -27,7 +27,7 @@ TestSessionLocal = async_sessionmaker(bind=test_engine, expire_on_commit=False)
 # Now it's safe to import the rest
 from main import app
 from app.models.base import Base
-from app.models.domain import User, UserRole, Category, Auction, AuctionStatus
+from app.models.domain import User, UserRole, Category, Auction, AuctionStatus, SellerProfile, SellerVerificationStatus
 from app.core.database import get_db
 
 # Disable rate limiting during tests (app-level)
@@ -116,7 +116,7 @@ async def test_user(db_session: AsyncSession) -> User:
 
 @pytest_asyncio.fixture
 async def seller_user(db_session: AsyncSession) -> User:
-    """Create and return a persisted seller user fixture."""
+    """Create and return a persisted, verified seller user fixture."""
     uid = str(uuid.uuid4())
     user = User(
         id=uid,
@@ -128,10 +128,21 @@ async def seller_user(db_session: AsyncSession) -> User:
         accepted_terms=True,
         accepted_privacy=True,
         marketing_consent=False,
+        credits_balance=1000.0,  # covers LISTING_FEE_CREDITS so API-level create tests aren't blocked by it
     )
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
+
+    # Verified SellerProfile so this fixture can create listings out of the
+    # box (doc §11.1/§11.5 requires verification, not just the seller role)
+    db_session.add(SellerProfile(
+        id=str(uuid.uuid4()),
+        user_id=uid,
+        account_type="individual",
+        verification_status=SellerVerificationStatus.verified,
+    ))
+    await db_session.commit()
     return user
 
 

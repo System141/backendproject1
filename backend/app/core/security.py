@@ -118,7 +118,21 @@ async def get_current_seller(
 
 
 async def get_current_admin(
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.super_admin)),
 ) -> User:
-    """Dependency: current user must be admin."""
+    """Dependency: current user must be admin or super_admin. This is the
+    gate for sensitive financial/credit/bid/user-management actions (doc
+    §17.1) - `support` is deliberately NOT included here, so a new sensitive
+    endpoint is support-blocked by default unless it explicitly opts in via
+    get_current_staff instead."""
+    return current_user
+
+
+async def get_current_staff(
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.super_admin, UserRole.support)),
+) -> User:
+    """Dependency: current user must be any staff tier, including support.
+    Use only for read-only/ticket-handling endpoints the doc explicitly
+    lists as within Support's remit (doc §17.1) - never for credit package
+    price, bid history, or other financial/audit mutations."""
     return current_user

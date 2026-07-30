@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.domain import Auction, AuctionStatus, Category, Bid, User, UserRole
+from app.models.domain import Auction, AuctionStatus, AuctionParticipant, Category, Bid, User, UserRole
 from app.models.base import Base
 from app.core.security import create_access_token
 
@@ -33,7 +33,7 @@ class TestPlaceBid:
             min_increment=50.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=7),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -52,6 +52,8 @@ class TestPlaceBid:
             marketing_consent=False,
         )
         db_session.add(buyer)
+        await db_session.commit()
+        db_session.add(AuctionParticipant(id=str(uuid.uuid4()), auction_id=auction.id, user_id=buyer.id, credits_spent=10.0))
         await db_session.commit()
 
         buyer_token = create_access_token(data={"sub": buyer.id, "role": buyer.role.value})
@@ -93,7 +95,7 @@ class TestPlaceBid:
             min_increment=25.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -124,7 +126,7 @@ class TestPlaceBid:
             min_increment=100.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -142,6 +144,8 @@ class TestPlaceBid:
             marketing_consent=False,
         )
         db_session.add(buyer)
+        await db_session.commit()
+        db_session.add(AuctionParticipant(id=str(uuid.uuid4()), auction_id=auction.id, user_id=buyer.id, credits_spent=10.0))
         await db_session.commit()
 
         token = create_access_token(data={"sub": buyer.id, "role": buyer.role.value})
@@ -175,7 +179,7 @@ class TestPlaceBid:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc) - timedelta(days=10),
             end_time=datetime.now(timezone.utc) - timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -225,7 +229,7 @@ class TestPlaceBid:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.pending_approval,
+            status=AuctionStatus.under_review,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -254,7 +258,7 @@ class TestPlaceBid:
             headers=headers,
         )
         assert response.status_code == 400
-        assert "not active" in response.json()["detail"].lower()
+        assert "not open for bidding" in response.json()["detail"].lower()
 
     async def test_bid_unauthorized(
         self,
@@ -275,7 +279,7 @@ class TestPlaceBid:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -307,7 +311,7 @@ class TestBidHistory:
             min_increment=25.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=7),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -368,7 +372,7 @@ class TestBidHistory:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -402,7 +406,7 @@ class TestFinalizeAuction:
             min_increment=25.0,
             start_time=datetime.now(timezone.utc) - timedelta(days=10),
             end_time=datetime.now(timezone.utc) - timedelta(hours=1),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.flush()
@@ -439,14 +443,14 @@ class TestFinalizeAuction:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "completed"
+        assert data["status"] == "ended"
         assert data["winner_user_id"] == buyer.id
         assert data["winning_bid"] == 600.0
         assert data["has_bids"] is True
 
         # Verify DB state
         await db_session.refresh(auction)
-        assert auction.status == AuctionStatus.completed
+        assert auction.status == AuctionStatus.ended
         assert auction.winner_user_id == buyer.id
 
     async def test_finalize_no_bids(
@@ -469,7 +473,7 @@ class TestFinalizeAuction:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc) - timedelta(days=10),
             end_time=datetime.now(timezone.utc) - timedelta(hours=1),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -480,7 +484,7 @@ class TestFinalizeAuction:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "completed"
+        assert data["status"] == "ended"
         assert data["winner_user_id"] is None
         assert data["has_bids"] is False
 
@@ -504,7 +508,7 @@ class TestFinalizeAuction:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=3),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -536,7 +540,7 @@ class TestFinalizeAuction:
             min_increment=10.0,
             start_time=datetime.now(timezone.utc) - timedelta(days=10),
             end_time=datetime.now(timezone.utc) - timedelta(hours=1),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -568,7 +572,7 @@ class TestMyBids:
             min_increment=25.0,
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc) + timedelta(days=7),
-            status=AuctionStatus.active,
+            status=AuctionStatus.live,
         )
         db_session.add(auction)
         await db_session.commit()
@@ -608,3 +612,59 @@ class TestMyBids:
         data = response.json()
         assert len(data) == 2
         assert all(b["user_id"] == buyer.id for b in data)
+        assert all("auction_lot_code" in b and "auction_end_time" in b for b in data)
+
+
+class TestJoinedAuctions:
+    async def test_joined_auctions_reports_bid_status(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        seller_user: User,
+        test_category: Category,
+    ):
+        """GET /api/auctions/joined should list auctions the user joined with their bid status (doc §10.4)."""
+        auction = Auction(
+            id=str(uuid.uuid4()),
+            seller_id=seller_user.id,
+            category_id=test_category.id,
+            title="Joined Auctions Test",
+            description="desc",
+            start_price=500.0,
+            current_price=500.0,
+            min_increment=25.0,
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=7),
+            status=AuctionStatus.live,
+        )
+        db_session.add(auction)
+        await db_session.commit()
+
+        buyer = User(
+            id=str(uuid.uuid4()),
+            name="Joiner",
+            email=f"joinedauc_{uuid.uuid4().hex[:8]}@example.com",
+            password_hash="$2b$12$dummyhash",
+            role=UserRole.buyer,
+            status="active",
+            accepted_terms=True,
+            accepted_privacy=True,
+            marketing_consent=False,
+            credits_balance=100.0,
+        )
+        db_session.add(buyer)
+        await db_session.commit()
+        buyer_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': buyer.id, 'role': 'buyer'})}"}
+
+        join_resp = await async_client.post(f"/api/auctions/{auction.id}/join", headers=buyer_headers)
+        assert join_resp.status_code == 200
+        response = await async_client.get("/api/auctions/joined", headers=buyer_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["auction_id"] == auction.id
+        assert data[0]["my_bid_status"] == "no_bid"
+
+        await async_client.post(f"/api/auctions/{auction.id}/bids", json={"amount": 600.0}, headers=buyer_headers)
+        response = await async_client.get("/api/auctions/joined", headers=buyer_headers)
+        assert response.json()[0]["my_bid_status"] == "highest"

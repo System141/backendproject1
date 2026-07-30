@@ -1,7 +1,7 @@
 import os
 import uuid
 import hashlib
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,7 +16,7 @@ from app.core.security import (
     decode_access_token,
     get_current_user,
 )
-from app.models.domain import User, UserRole
+from app.models.domain import User, UserRole, _utcnow
 from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
@@ -172,7 +172,7 @@ async def forgot_password(request: Request, req: PasswordResetRequest, db: Async
     reset_token = str(uuid.uuid4())
     # Hash the token before storing in DB (defense-in-depth)
     user.reset_token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
-    user.reset_token_expires_at = datetime.now(dt_timezone.utc) + timedelta(hours=1)
+    user.reset_token_expires_at = _utcnow() + timedelta(hours=1)
     await db.commit()
 
     # In demo/dev mode, return the token directly so the reset form can be tested
@@ -195,7 +195,7 @@ async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncS
     result = await db.execute(
         select(User).where(
             User.reset_token_hash == token_hash,
-            User.reset_token_expires_at > datetime.now(dt_timezone.utc),
+            User.reset_token_expires_at > _utcnow(),
         )
     )
     user = result.scalars().first()

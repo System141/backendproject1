@@ -18,6 +18,9 @@ MISSING_COLUMNS = {
         ("reset_token_hash", "VARCHAR"),
         ("reset_token_expires_at", "TIMESTAMP"),
         ("phone", "VARCHAR"),
+        ("city", "VARCHAR"),
+        ("address", "VARCHAR"),
+        ("preferred_language", "VARCHAR"),
         ("credits_balance", "FLOAT DEFAULT 0"),
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
         ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
@@ -37,22 +40,46 @@ MISSING_COLUMNS = {
         ("winner_user_id", "VARCHAR"),
         ("is_featured", "BOOLEAN DEFAULT FALSE"),
         ("listing_fee", "FLOAT"),
+        ("lot_code", "VARCHAR"),
+        ("participation_credit_cost", "FLOAT"),
+        ("review_notes", "TEXT"),
+        ("contact_flagged", "BOOLEAN DEFAULT FALSE"),
     ],
     "bids": [
         ("ip_address", "VARCHAR"),
-    ],
-    "payments": [
-        ("stripe_session_id", "VARCHAR"),
-        ("buyer_service_fee", "FLOAT"),
-        ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("idempotency_key", "VARCHAR"),
+        ("invalidated", "BOOLEAN DEFAULT FALSE"),
+        ("invalidated_reason", "TEXT"),
+        ("invalidated_by", "VARCHAR"),
+        ("invalidated_at", "TIMESTAMP"),
     ],
     "support_tickets": [
         ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("category", "VARCHAR DEFAULT 'other'"),
+        ("lot_code", "VARCHAR"),
+    ],
+    "auction_images": [
+        ("media_type", "VARCHAR DEFAULT 'image'"),
+        ("visibility", "VARCHAR DEFAULT 'public'"),
     ],
     "audit_logs": [
         ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ],
+    "notifications": [
+        ("event_key", "VARCHAR"),
+    ],
 }
+
+# ADD COLUMN can't declare UNIQUE inline on an already-existing table (Postgres
+# rejects it on ALTER), so these get a separate unique index. New tables
+# created via Base.metadata.create_all get the constraint natively - this
+# list only matters for columns bolted onto pre-existing deployed tables.
+MISSING_UNIQUE_INDEXES = [
+    ("bids", "idempotency_key", "uq_bids_idempotency_key"),
+    ("auctions", "lot_code", "uq_auctions_lot_code"),
+    ("notifications", "event_key", "uq_notifications_event_key"),
+    ("credit_purchases", "stripe_session_id", "uq_credit_purchases_stripe_session_id"),
+]
 
 
 async def run_migration_async(conn):
@@ -65,6 +92,13 @@ async def run_migration_async(conn):
                 logger.info(f"Migration: added {table}.{col_name}")
             except Exception as e:
                 logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
+    for table, col_name, index_name in MISSING_UNIQUE_INDEXES:
+        try:
+            sql = text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
+            await conn.execute(sql)
+            logger.info(f"Migration: added unique index {index_name}")
+        except Exception as e:
+            logger.warning(f"Migration: skipped unique index {index_name} ({e})")
 
 
 async def run_migration_raw(db_session):
@@ -79,3 +113,12 @@ async def run_migration_raw(db_session):
             except Exception as e:
                 await db_session.rollback()
                 logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
+    for table, col_name, index_name in MISSING_UNIQUE_INDEXES:
+        try:
+            sql = text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
+            await db_session.execute(sql)
+            await db_session.commit()
+            logger.info(f"Migration: added unique index {index_name}")
+        except Exception as e:
+            await db_session.rollback()
+            logger.warning(f"Migration: skipped unique index {index_name} ({e})")

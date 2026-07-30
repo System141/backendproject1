@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import Depends
 from app.models.domain import Category
-from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, payments_router, support_router, admin_router, notifications_router
+from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, support_router, admin_router, notifications_router, watchlist_router, legal_router, sellers_router
 from app.api.credits import credits_router
 from app.api.ws import manager
 
@@ -67,6 +68,16 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Doc §19.1: redirect HTTP -> HTTPS in production. Gated by ENVIRONMENT so
+# local dev/tests (plain HTTP, no TLS) and the docker-compose stack aren't
+# broken by default. Only correct once a reverse proxy actually terminates
+# TLS in front of this app - if that proxy also forwards X-Forwarded-Proto,
+# fine; if it doesn't, this middleware alone can't detect an already-HTTPS
+# request from the proxy and would loop. That reverse-proxy wiring is the
+# infra half of §19.1 (domain/TLS/proxy choice), outside this repo's scope.
+if os.getenv("ENVIRONMENT") == "production":
+    app.add_middleware(HTTPSRedirectMiddleware)
+
 # CORS – tightened for production
 CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
@@ -87,11 +98,13 @@ app.include_router(auctions_router)
 app.include_router(uploads_router)
 app.include_router(bids_router)
 app.include_router(ws_router)
-app.include_router(payments_router)
 app.include_router(support_router)
 app.include_router(admin_router)
 app.include_router(notifications_router)
 app.include_router(credits_router)
+app.include_router(watchlist_router)
+app.include_router(legal_router)
+app.include_router(sellers_router)
 
 # Mount static files for uploads (before SPA catch-all)
 os.makedirs(UPLOAD_DIR, exist_ok=True)

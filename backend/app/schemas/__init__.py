@@ -3,6 +3,8 @@ from .user import *
 from .category import *
 from .auction import *
 from .bid import *
-from .payment import *
+from .credit import *
 from .support import *
 from .notification import *
+from .legal import *
+from .seller import *

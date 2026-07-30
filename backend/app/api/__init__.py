@@ -4,7 +4,9 @@ from .auctions import auctions_router
 from .uploads import uploads_router
 from .bids import bids_router
 from .ws import ws_router
-from .payments import payments_router
 from .support import support_router
 from .admin import admin_router
 from .notifications import notifications_router
+from .watchlist import watchlist_router
+from .legal import legal_router
+from .sellers import sellers_router

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.models.domain import (
     Auction, AuctionStatus, AuctionParticipant, Bid, Category, CreditPackage, CreditPurchase,
-    PaymentStatus, TermsAcceptance, User, UserRole,
+    PaymentStatus, TermsAcceptance, User, UserRole, Notification, NotificationType,
 )
 from app.core.security import create_access_token, hash_password
 
@@ -206,6 +206,33 @@ class TestCreditWebhookIdempotency:
 
         await db_session.refresh(test_user)
         assert test_user.credits_balance == 100.0
+
+    async def test_failed_payment_alerts_admins(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_user: User,
+    ):
+        """Doc §19.7: a failed/declined webhook callback must alert admin ops,
+        distinct from the routine user-facing 'purchase failed' notice."""
+        purchase = CreditPurchase(
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            credits_amount=50.0,
+            amount_eur=5.0,
+            stripe_session_id="order-declined-1",
+            status=PaymentStatus.pending,
+        )
+        db_session.add(purchase)
+        await db_session.commit()
+
+        body = {"order_number": "order-declined-1", "status": "declined", "response_code": "1234"}
+        resp = await async_client.post("/api/credits/monri/callback", json=body)
+        assert resp.status_code == 200
+
+        result = await db_session.execute(
+            select(Notification).where(Notification.user_id == admin_user.id, Notification.type == NotificationType.system_alert)
+        )
+        alerts = result.scalars().all()
+        assert len(alerts) == 1
+        assert "order-declined-1" in alerts[0].message
 
 
 class TestCreditCheckoutTermsAcceptance:

@@ -2,7 +2,8 @@ import os
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from datetime import datetime, timezone
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -10,9 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from app.core.database import engine, Base, get_db
+from app.core.database import engine, Base, get_db, AsyncSessionLocal
 from app.core.scheduler import run_scheduler
 from app.core.migrations import run_migration_async
+from app.core.category_seed import seed_default_categories
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import Depends
@@ -20,6 +22,7 @@ from app.models.domain import Category
 from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, support_router, admin_router, notifications_router, watchlist_router, legal_router, sellers_router
 from app.api.credits import credits_router
 from app.api.ws import manager
+from app.services.notifications import alert_admins
 
 # Import all models so Base metadata is populated
 from app.models import *
@@ -46,6 +49,8 @@ async def lifespan(app: FastAPI):
         # Run auto-migration for missing columns
         await run_migration_async(conn)
     logger.info("Tables created, migrations complete.")
+    async with AsyncSessionLocal() as seed_db:
+        await seed_default_categories(seed_db)
     # Start background scheduler for auto-finalize
     scheduler_task = asyncio.create_task(run_scheduler())
     await manager.start_heartbeat()
@@ -67,6 +72,34 @@ app = FastAPI(
 # Register rate-limit error handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Doc §19.7: "Centralized application error logs" + "kritik hata icin admin
+# teknik ekibe uyari uretmeli". Catches anything an endpoint didn't already
+# handle (HTTPException still goes through FastAPI's own handler, never
+# reaches here) so no 500 is ever silent - logged at CRITICAL, and every
+# admin gets an in-app + email alert via the same notification system as
+# the two other §19.7 call sites (scheduler.py, credits.py).
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.critical(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    try:
+        async with AsyncSessionLocal() as db:
+            # event_key scoped to endpoint+exception type+calendar day (not
+            # per-request) so a persistently broken endpoint alerts once per
+            # day, not once per failed request - and, unlike an undated key,
+            # still re-alerts the next day if the bug isn't fixed, rather
+            # than firing exactly once for the lifetime of that row.
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            await alert_admins(
+                db,
+                f"Unhandled server error: {request.method} {request.url.path}",
+                f"{type(exc).__name__}: {exc}",
+                event_key=f"unhandled_error:{request.method}:{request.url.path}:{type(exc).__name__}:{today}",
+            )
+    except Exception:
+        pass  # ponytail: never let the alerting path itself take down error handling
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # Doc §19.1: redirect HTTP -> HTTPS in production. Gated by ENVIRONMENT so
 # local dev/tests (plain HTTP, no TLS) and the docker-compose stack aren't
@@ -126,7 +159,7 @@ async def health():
 async def list_categories_public(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Category).order_by(Category.id))
     cats = result.scalars().all()
-    return [{"id": c.id, "name": c.name, "slug": c.slug, "status": c.status or "active"} for c in cats]
+    return [{"id": c.id, "name": c.name, "slug": c.slug, "parent_id": c.parent_id, "status": c.status or "active"} for c in cats]
 
 
 # ---- Serve the SPA index.html ----

@@ -22,6 +22,7 @@ def _user_response(u: User) -> UserResponse:
         preferred_language=u.preferred_language,
         role=u.role.value if hasattr(u.role, 'value') else str(u.role),
         status=u.status,
+        email_verified=u.email_verified,
         created_at=str(u.created_at) if u.created_at else "",
     )
 
@@ -98,6 +99,7 @@ async def seller_stats(
 
     return {
         "total_auctions": sum(counts.values()),
+        "draft_auctions": counts.get("draft", 0),
         "pending_auctions": counts.get("under_review", 0),
         "active_auctions": counts.get("live", 0) + counts.get("extended", 0),
         "completed_auctions": counts.get("ended", 0),

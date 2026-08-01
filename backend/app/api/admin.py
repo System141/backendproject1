@@ -1,6 +1,7 @@
 """Admin panel API endpoints. Requires admin role."""
 import os
 import uuid
+import string as string_module
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,15 +9,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, desc, asc, func, text
 
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_staff, hash_password, create_access_token
+from app.core.security import (
+    get_current_admin, get_current_staff, hash_password, create_access_token,
+    generate_totp_secret, verify_totp, totp_otpauth_url,
+)
 from app.core.migrations import run_migration_raw
 from app.models.domain import (
     User, UserRole, Auction, AuctionStatus, BIDDABLE_STATUSES, Bid, CreditPurchase, PaymentStatus, SupportTicket,
-    Category, AuditLog, CreditPackage, BidIncrementRule, PlatformSettings, AuctionParticipant,
-    CreditLedgerType, TermsDocument, SellerProfile, SellerVerificationStatus, _utcnow,
+    Category, AuditLog, CreditPackage, BidIncrementRule, PlatformSettings, AuctionParticipant, AuctionImage,
+    CreditLedgerType, TermsDocument, SellerProfile, SellerVerificationStatus, NotificationTemplate, _utcnow,
 )
-from app.schemas.auth import UserResponse, TokenResponse
-from app.schemas.auction import AuctionResponse
+from app.schemas.auth import UserResponse, TokenResponse, TotpSetupResponse, TotpCodeRequest, TotpStatusResponse
+from app.schemas.auction import AuctionResponse, AuctionImageResponse
 from app.schemas.bid import BidResponse
 from app.schemas.category import CategoryResponse, CategoryCreate, CategoryUpdate
 from app.schemas.credit import (
@@ -28,9 +32,10 @@ from app.schemas.credit import (
 from app.schemas.support import SupportTicketResponse
 from app.schemas.legal import TermsDocumentResponse, TermsDocumentCreate
 from app.schemas.seller import SellerProfileResponse
-from app.services.auctions import build_auction_response, get_or_create_settings
+from app.schemas.notification import NotificationTemplateResponse, NotificationTemplateUpdate
+from app.services.auctions import build_auction_response, build_auction_image_response, get_or_create_settings
 from app.services.credits import apply_ledger_entry
-from app.services.notifications import send_notification, NotificationType
+from app.services.notifications import send_notification, NotificationType, TEMPLATABLE_NOTIFICATION_TYPES
 
 logger = logging.getLogger("bidmont")
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -143,6 +148,7 @@ async def admin_list_users(
             phone=u.phone,
             role=u.role.value if hasattr(u.role, "value") else str(u.role),
             status=u.status,
+            email_verified=u.email_verified,
             created_at=str(u.created_at) if u.created_at else "",
         )
         for u in users
@@ -176,6 +182,7 @@ async def admin_update_user_status(
         phone=user.phone,
         role=user.role.value if hasattr(user.role, "value") else str(user.role),
         status=user.status,
+        email_verified=user.email_verified,
         created_at=str(user.created_at) if user.created_at else "",
     )
 
@@ -548,7 +555,7 @@ async def admin_list_auctions(
 
     query = (
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
         .order_by(desc(Auction.created_at))
     )
     if status:
@@ -574,7 +581,7 @@ async def admin_toggle_featured(
 
     result = await db.execute(
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Auction.id == auction_id)
     )
     auction = result.scalars().first()
@@ -588,6 +595,30 @@ async def admin_toggle_featured(
     await _log_audit(db, current_user.id, "toggle_featured", "auction", auction_id, f"Featured set to {is_featured}")
 
     return build_auction_response(auction)
+
+
+@admin_router.put("/auction-images/{image_id}/visibility", response_model=AuctionImageResponse)
+async def admin_set_image_visibility(
+    image_id: str,
+    visibility: str = Query(..., pattern="^(public|private)$"),
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Doc §6.2: "Public/private erişim seviyesi admin'den ayarlanabilsin" -
+    the only way a document (or image) becomes public/private. Admin only."""
+    result = await db.execute(select(AuctionImage).where(AuctionImage.id == image_id))
+    img = result.scalars().first()
+    if not img:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    old_visibility = img.visibility
+    img.visibility = visibility
+    await db.commit()
+    await db.refresh(img)
+
+    await _log_audit(db, current_user.id, "set_image_visibility", "auction_image", image_id, f"visibility: {old_visibility!r}->{visibility!r}")
+
+    return build_auction_image_response(img)
 
 
 @admin_router.post("/auctions/{auction_id}/cancel", response_model=AuctionResponse)
@@ -606,7 +637,7 @@ async def admin_cancel_auction(
 
     result = await db.execute(
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Auction.id == auction_id)
     )
     auction = result.scalars().first()
@@ -929,3 +960,159 @@ async def admin_stats(
         "pending_auctions": pending_auctions,
         "total_credit_revenue": total_credit_revenue,
     }
+
+
+# ========== ADMIN 2FA (doc §17.3) ==========
+# Self-service only - a staff member can only set up/enable/disable TOTP on
+# their own account, never another admin's. get_current_staff (not
+# get_current_admin) so support-tier accounts can also secure their login.
+@admin_router.get("/2fa/status", response_model=TotpStatusResponse)
+async def get_2fa_status(current_user: User = Depends(get_current_staff)):
+    return TotpStatusResponse(enabled=current_user.totp_enabled)
+
+
+@admin_router.post("/2fa/setup", response_model=TotpSetupResponse)
+async def setup_2fa(
+    current_user: User = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate (or regenerate) a TOTP secret. Not yet enabled - the admin
+    must add it to an authenticator app and confirm a code via /2fa/verify
+    before it's enforced at login."""
+    if current_user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA is already enabled. Disable it first to generate a new secret.")
+    secret = generate_totp_secret()
+    current_user.totp_secret = secret
+    await db.commit()
+    return TotpSetupResponse(secret=secret, otpauth_url=totp_otpauth_url(secret, current_user.email))
+
+
+@admin_router.post("/2fa/verify")
+async def verify_and_enable_2fa(
+    req: TotpCodeRequest,
+    current_user: User = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Confirm the authenticator app is correctly configured, then enable
+    2FA enforcement at login."""
+    if not current_user.totp_secret:
+        raise HTTPException(status_code=400, detail="Call /2fa/setup first")
+    if not verify_totp(current_user.totp_secret, req.code):
+        raise HTTPException(status_code=400, detail="Invalid code")
+    current_user.totp_enabled = True
+    await db.commit()
+    await _log_audit(db, current_user.id, "enable_2fa", "user", current_user.id)
+    return {"status": "enabled"}
+
+
+@admin_router.post("/2fa/disable")
+async def disable_2fa(
+    req: TotpCodeRequest,
+    current_user: User = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Requires a currently-valid code (not just the JWT) so a hijacked
+    session token alone can't turn off 2FA."""
+    if not current_user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+    if not verify_totp(current_user.totp_secret, req.code):
+        raise HTTPException(status_code=400, detail="Invalid code")
+    current_user.totp_enabled = False
+    current_user.totp_secret = None
+    await db.commit()
+    await _log_audit(db, current_user.id, "disable_2fa", "user", current_user.id)
+    return {"status": "disabled"}
+
+
+# ========== NOTIFICATION TEMPLATES (doc §17 admin panel checklist) ==========
+def _validate_template_placeholders(text_value: str | None, allowed: list[str]) -> None:
+    if not text_value:
+        return
+    used = {name for _, name, _, _ in string_module.Formatter().parse(text_value) if name}
+    unknown = used - set(allowed)
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown placeholder(s): {', '.join(sorted(unknown))}. Allowed: {', '.join(allowed) or '(none)'}",
+        )
+
+
+@admin_router.get("/notification-templates", response_model=list[NotificationTemplateResponse])
+async def list_notification_templates(
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Only the notification types actually wired to read a template at
+    send-time are listed - customizing any other type would silently do
+    nothing, so it's not offered here (see TEMPLATABLE_NOTIFICATION_TYPES)."""
+    result = await db.execute(select(NotificationTemplate))
+    existing = {row.type: row for row in result.scalars().all()}
+    out = []
+    for ntype, placeholders in TEMPLATABLE_NOTIFICATION_TYPES.items():
+        row = existing.get(ntype.value)
+        out.append(NotificationTemplateResponse(
+            type=ntype.value,
+            placeholders=placeholders,
+            title_en=row.title_en if row else None,
+            message_en=row.message_en if row else None,
+            title_me=row.title_me if row else None,
+            message_me=row.message_me if row else None,
+        ))
+    return out
+
+
+@admin_router.put("/notification-templates/{template_type}", response_model=NotificationTemplateResponse)
+async def update_notification_template(
+    template_type: str,
+    req: NotificationTemplateUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        ntype = NotificationType(template_type)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown notification type")
+    if ntype not in TEMPLATABLE_NOTIFICATION_TYPES:
+        raise HTTPException(status_code=400, detail="This notification type does not support template customization")
+    allowed = TEMPLATABLE_NOTIFICATION_TYPES[ntype]
+    for field_value in (req.title_en, req.message_en, req.title_me, req.message_me):
+        _validate_template_placeholders(field_value, allowed)
+
+    result = await db.execute(select(NotificationTemplate).where(NotificationTemplate.type == ntype.value))
+    row = result.scalars().first()
+    if not row:
+        row = NotificationTemplate(type=ntype.value)
+        db.add(row)
+    row.title_en = req.title_en
+    row.message_en = req.message_en
+    row.title_me = req.title_me
+    row.message_me = req.message_me
+    await db.commit()
+
+    await _log_audit(db, current_user.id, "update_notification_template", "notification_template", ntype.value)
+
+    return NotificationTemplateResponse(
+        type=ntype.value, placeholders=allowed,
+        title_en=row.title_en, message_en=row.message_en,
+        title_me=row.title_me, message_me=row.message_me,
+    )
+
+
+@admin_router.delete("/notification-templates/{template_type}")
+async def reset_notification_template(
+    template_type: str,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revert to the hardcoded default text (delete the override row)."""
+    try:
+        ntype = NotificationType(template_type)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown notification type")
+    result = await db.execute(select(NotificationTemplate).where(NotificationTemplate.type == ntype.value))
+    row = result.scalars().first()
+    if row:
+        await db.delete(row)
+        await db.commit()
+        await _log_audit(db, current_user.id, "reset_notification_template", "notification_template", ntype.value)
+    return {"status": "reset"}

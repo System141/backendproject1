@@ -36,5 +36,7 @@ backend/*.sqlite
 # === Uploads (user generated) ===
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/private_uploads/*
+!backend/private_uploads/.gitkeep
 CLAUDE.md
 # === End of .gitignore ===

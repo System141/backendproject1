@@ -15,6 +15,7 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     get_current_user,
+    verify_totp,
 )
 from app.models.domain import User, UserRole, _utcnow
 from app.schemas.auth import (
@@ -24,12 +25,52 @@ from app.schemas.auth import (
     UserResponse,
     PasswordResetRequest,
     PasswordResetConfirm,
+    EmailVerifyRequest,
 )
+from app.services.notifications import _send_email
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Per-endpoint rate limits
 limiter = Limiter(key_func=get_remote_address)
+
+EMAIL_VERIFICATION_TTL_HOURS = 24
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        phone=user.phone,
+        role=user.role.value,
+        status=user.status,
+        email_verified=user.email_verified,
+        created_at=str(user.created_at) if user.created_at else "",
+    )
+
+
+async def _issue_verification_email(db: AsyncSession, user: User) -> str:
+    """Doc §20 AC-01: 'iletisim dogrular' (verifies contact). Same
+    hash-and-expire pattern as forgot_password's reset_token, just a
+    separate column so a live password-reset link and a live email-
+    verification link never share (or invalidate) one another."""
+    token = str(uuid.uuid4())
+    user.email_verification_token_hash = hashlib.sha256(token.encode()).hexdigest()
+    user.email_verification_expires_at = _utcnow() + timedelta(hours=EMAIL_VERIFICATION_TTL_HOURS)
+    await db.commit()
+
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8000")
+    verify_link = f"{frontend_url}/#verify-email?token={token}"
+    use_me = user.preferred_language == "me"
+    subject = "Potvrdite svoju e-mail adresu" if use_me else "Verify your email address"
+    body = (
+        f"Kliknite na link da potvrdite svoj BidMont nalog: {verify_link}\n\nLink istice za {EMAIL_VERIFICATION_TTL_HOURS}h."
+        if use_me else
+        f"Click the link to verify your BidMont account: {verify_link}\n\nThis link expires in {EMAIL_VERIFICATION_TTL_HOURS}h."
+    )
+    _send_email(user.email, subject, body)
+    return token
 
 
 @auth_router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -84,20 +125,21 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
     await db.commit()
     await db.refresh(user)
 
+    # Doc §20 AC-01: send a verification email on signup. Never blocks
+    # login/registration on this - the doc's AC-01 scenario just wants the
+    # verify step to exist and work, not to gate other actions on it.
+    verification_token = await _issue_verification_email(db, user)
+
     # Generate JWT
     access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
 
     return TokenResponse(
         access_token=access_token,
-        user=UserResponse(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            phone=user.phone,
-            role=user.role.value,
-            status=user.status,
-            created_at=str(user.created_at) if user.created_at else "",
-        ),
+        user=_user_response(user),
+        # Same dev-mode convenience as forgot-password's reset_token: expose
+        # the raw token directly so the verify flow is testable without a
+        # real mailbox. None (omitted) in production.
+        email_verification_token=verification_token if os.getenv("ENVIRONMENT") == "development" else None,
     )
 
 
@@ -120,21 +162,18 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
             detail="Account is not active. Please contact support.",
         )
 
+    # Doc §17.3: admin 2FA - "Admin login yalnız password ile kalmamalı" once
+    # the account has enabled TOTP (opt-in via /admin/2fa/setup + verify).
+    if user.totp_enabled:
+        if not req.totp_code:
+            raise HTTPException(status_code=401, detail="TOTP code required")
+        if not verify_totp(user.totp_secret, req.totp_code):
+            raise HTTPException(status_code=401, detail="Invalid TOTP code")
+
     # Generate JWT
     access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
 
-    return TokenResponse(
-        access_token=access_token,
-        user=UserResponse(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            phone=user.phone,
-            role=user.role.value,
-            status=user.status,
-            created_at=str(user.created_at) if user.created_at else "",
-        ),
-    )
+    return TokenResponse(access_token=access_token, user=_user_response(user))
 
 
 @auth_router.post("/refresh", response_model=TokenResponse)
@@ -143,18 +182,7 @@ async def refresh_token(
 ):
     """Refresh access token. Requires a valid (not expired) token."""
     new_token = create_access_token(data={"sub": current_user.id, "role": current_user.role.value})
-    return TokenResponse(
-        access_token=new_token,
-        user=UserResponse(
-            id=current_user.id,
-            name=current_user.name,
-            email=current_user.email,
-            phone=current_user.phone,
-            role=current_user.role.value,
-            status=current_user.status,
-            created_at=str(current_user.created_at) if current_user.created_at else "",
-        ),
-    )
+    return TokenResponse(access_token=new_token, user=_user_response(current_user))
 
 
 @auth_router.post("/forgot-password")
@@ -213,3 +241,41 @@ async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncS
     await db.commit()
 
     return {"message": "Password reset successfully."}
+
+
+@auth_router.post("/verify-email")
+@limiter.limit("20/minute")
+async def verify_email(request: Request, req: EmailVerifyRequest, db: AsyncSession = Depends(get_db)):
+    """Doc §20 AC-01: consume the token sent by register()/resend-verification."""
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
+    result = await db.execute(
+        select(User).where(
+            User.email_verification_token_hash == token_hash,
+            User.email_verification_expires_at > _utcnow(),
+        )
+    )
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification token.")
+
+    user.email_verified = True
+    user.email_verification_token_hash = None
+    user.email_verification_expires_at = None
+    await db.commit()
+
+    return {"message": "Email verified successfully."}
+
+
+@auth_router.post("/resend-verification")
+@limiter.limit("5/minute")
+async def resend_verification(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Self-service resend for a user who missed/lost the original email."""
+    if current_user.email_verified:
+        return {"message": "Email already verified."}
+    await _issue_verification_email(db, current_user)
+    return {"message": "Verification email sent."}

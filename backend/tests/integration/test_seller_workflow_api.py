@@ -44,6 +44,32 @@ class TestSellerApplication:
         resp = await async_client.post("/api/sellers/apply", json=payload, headers=auth_headers)
         assert resp.status_code == 409
 
+    async def test_apply_blocked_without_email_verification(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ):
+        """Doc §11.2's "Phone + email verification" application field: an
+        unverified email must block the application (the phone/SMS half
+        stays unenforced - it needs an SMS gateway decision, see C-list)."""
+        user = User(
+            id=str(uuid.uuid4()),
+            name="Unverified Applicant",
+            email=f"unverified_{uuid.uuid4().hex[:8]}@example.com",
+            password_hash="$2b$12$dummyhash",
+            role=UserRole.buyer,
+            status="active",
+            accepted_terms=True,
+            accepted_privacy=True,
+            marketing_consent=False,
+            email_verified=False,
+        )
+        db_session.add(user)
+        await db_session.commit()
+
+        resp = await async_client.post(
+            "/api/sellers/apply", json={"account_type": "individual"}, headers=_auth_headers(user)
+        )
+        assert resp.status_code == 403
+
     async def test_unverified_seller_cannot_create_listing(
         self, async_client: AsyncClient, auth_headers: dict, test_category: Category
     ):

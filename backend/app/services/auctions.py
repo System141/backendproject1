@@ -17,11 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.domain import (
-    Auction, AuctionStatus, Bid, User, NotificationType, BidIncrementRule, PlatformSettings,
+    Auction, AuctionImage, AuctionStatus, Bid, User, NotificationType, BidIncrementRule, PlatformSettings,
     Category, LotSequence, TermsDocument,
 )
 from app.services.notifications import send_notification
-from app.schemas.auction import AuctionResponse
+from app.schemas.auction import AuctionResponse, AuctionImageResponse
 
 logger = logging.getLogger("bidmont.auction_service")
 
@@ -288,6 +288,7 @@ def build_auction_response(auction: Auction) -> AuctionResponse:
         id=auction.id,
         seller_id=auction.seller_id,
         seller_name=auction.seller.name if hasattr(auction, 'seller') and auction.seller else None,
+        seller_type=auction.seller.seller_profile.seller_type if hasattr(auction, 'seller') and auction.seller and auction.seller.seller_profile else None,
         category_id=auction.category_id,
         title=auction.title,
         description=auction.description,
@@ -311,8 +312,48 @@ def build_auction_response(auction: Auction) -> AuctionResponse:
         fuel_type=auction.fuel_type,
         transmission=auction.transmission,
         damage_status=auction.damage_status,
+        defect_exterior=auction.defect_exterior,
+        defect_interior=auction.defect_interior,
+        defect_mechanical=auction.defect_mechanical,
+        defect_tyres=auction.defect_tyres,
+        defect_missing_parts=auction.defect_missing_parts,
         equipment_brand=auction.equipment_brand,
         serial_number=auction.serial_number,
         condition=auction.condition,
         location=auction.location,
+        operating_hours=auction.operating_hours,
+        engine_power=auction.engine_power,
+        operating_weight=auction.operating_weight,
+        service_history=auction.service_history,
+        inspection_availability=auction.inspection_availability,
+        dimensions=auction.dimensions,
+        included_items=auction.included_items,
+        quantity=auction.quantity,
     )
+
+
+def build_auction_image_response(img: AuctionImage) -> AuctionImageResponse:
+    """Build an AuctionImageResponse from an AuctionImage ORM instance.
+
+    Doc §6.2: documents need a secure, visibility-checked download - never a
+    direct static-file URL (private ones would otherwise be reachable by
+    anyone who guesses/reuses the filename). Images keep their existing
+    directly-servable `/uploads/...` URL unchanged; only documents get their
+    `image_url` rewritten to route through the authorizing download endpoint.
+    """
+    image_url = f"/api/uploads/{img.id}/download" if img.media_type == "document" else img.image_url
+    return AuctionImageResponse(
+        id=img.id, image_url=image_url, sort_order=img.sort_order,
+        media_type=img.media_type, doc_category=img.doc_category, visibility=img.visibility,
+    )
+
+
+def visible_auction_images(auction: Auction, viewer_user_id: Optional[str], viewer_is_staff: bool) -> list[AuctionImage]:
+    """Doc §6.2: private documents are visible only to the auction's own
+    seller or staff/admin - everyone else (including anonymous visitors)
+    only sees public images/documents. Images are always public today."""
+    is_owner_or_staff = viewer_is_staff or (viewer_user_id is not None and viewer_user_id == auction.seller_id)
+    return [
+        img for img in (auction.images or [])
+        if img.visibility == "public" or is_owner_or_staff
+    ]

@@ -1,6 +1,13 @@
+import base64
+import hashlib
+import hmac
 import os
+import secrets
+import struct
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import quote
 
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
@@ -34,6 +41,48 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
     )
+
+
+# ---- TOTP (doc §17.3: admin 2FA) ----
+# RFC 6238 TOTP implemented against stdlib only (hmac/hashlib/struct/base64) -
+# no pyotp/qrcode dependency needed for a 6-digit, 30s-step code.
+TOTP_STEP_SECONDS = 30
+TOTP_DIGITS = 6
+
+
+def generate_totp_secret() -> str:
+    """Random 160-bit base32 secret (RFC 4226 recommended key length)."""
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii")
+
+
+def _hotp(secret_b32: str, counter: int) -> str:
+    key = base64.b32decode(secret_b32.upper())
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code_int = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** TOTP_DIGITS)
+    return str(code_int).zfill(TOTP_DIGITS)
+
+
+def verify_totp(secret_b32: str, code: str, valid_window: int = 1) -> bool:
+    """Check `code` against the current 30s time-step, tolerating clock
+    drift of up to `valid_window` steps either side."""
+    if not secret_b32 or not code:
+        return False
+    counter = int(time.time() // TOTP_STEP_SECONDS)
+    code = code.strip()
+    return any(
+        hmac.compare_digest(_hotp(secret_b32, counter + offset), code)
+        for offset in range(-valid_window, valid_window + 1)
+    )
+
+
+def totp_otpauth_url(secret_b32: str, account_email: str, issuer: str = "BidMont") -> str:
+    """otpauth:// URI so any standard authenticator app (Google Authenticator,
+    Authy, ...) can add the account by scanning/pasting - no QR image
+    generation needed client-side, the app can render a QR from this URI or
+    the admin can type the raw secret in manually."""
+    label = quote(f"{issuer}:{account_email}")
+    return f"otpauth://totp/{label}?secret={secret_b32}&issuer={quote(issuer)}&digits={TOTP_DIGITS}&period={TOTP_STEP_SECONDS}"
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

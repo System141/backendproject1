@@ -266,6 +266,76 @@ class TestResetPassword:
         assert response.status_code == 422
 
 
+class TestEmailVerification:
+    """Doc §20 AC-01: new user registers, verifies contact info, buys credits."""
+
+    async def test_register_starts_unverified_and_returns_dev_token(
+        self, async_client: AsyncClient, test_user_data: dict,
+    ):
+        response = await async_client.post("/api/auth/register", json=test_user_data)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["user"]["email_verified"] is False
+        assert data["email_verification_token"]  # dev-mode convenience, same as forgot-password's reset_token
+
+    async def test_verify_email_with_valid_token(
+        self, async_client: AsyncClient, test_user_data: dict, db_session: AsyncSession,
+    ):
+        register_response = await async_client.post("/api/auth/register", json=test_user_data)
+        token = register_response.json()["email_verification_token"]
+
+        response = await async_client.post("/api/auth/verify-email", json={"token": token})
+        assert response.status_code == 200
+
+        result = await db_session.execute(select(User).where(User.email == test_user_data["email"]))
+        user = result.scalars().first()
+        assert user.email_verified is True
+        assert user.email_verification_token_hash is None
+
+    async def test_verify_email_with_invalid_token(self, async_client: AsyncClient):
+        response = await async_client.post("/api/auth/verify-email", json={"token": "not-a-real-token"})
+        assert response.status_code == 400
+
+    async def test_verify_email_token_is_single_use(
+        self, async_client: AsyncClient, test_user_data: dict,
+    ):
+        register_response = await async_client.post("/api/auth/register", json=test_user_data)
+        token = register_response.json()["email_verification_token"]
+
+        first = await async_client.post("/api/auth/verify-email", json={"token": token})
+        assert first.status_code == 200
+        second = await async_client.post("/api/auth/verify-email", json={"token": token})
+        assert second.status_code == 400
+
+    async def test_resend_verification_requires_auth(self, async_client: AsyncClient):
+        response = await async_client.post("/api/auth/resend-verification")
+        assert response.status_code in (401, 403)
+
+    async def test_resend_verification_issues_new_usable_token(
+        self, async_client: AsyncClient, auth_headers: dict, test_user: User, db_session: AsyncSession,
+    ):
+        test_user.email_verified = False
+        await db_session.commit()
+
+        response = await async_client.post("/api/auth/resend-verification", headers=auth_headers)
+        assert response.status_code == 200
+        assert "sent" in response.json()["message"].lower()
+
+        await db_session.refresh(test_user)
+        assert test_user.email_verification_token_hash is not None
+        assert test_user.email_verified is False
+
+    async def test_resend_verification_noop_when_already_verified(
+        self, async_client: AsyncClient, auth_headers: dict, test_user: User, db_session: AsyncSession,
+    ):
+        test_user.email_verified = True
+        await db_session.commit()
+
+        response = await async_client.post("/api/auth/resend-verification", headers=auth_headers)
+        assert response.status_code == 200
+        assert "already verified" in response.json()["message"].lower()
+
+
 class TestGetMe:
     async def test_get_me_authenticated(
         self, async_client: AsyncClient, auth_headers: dict

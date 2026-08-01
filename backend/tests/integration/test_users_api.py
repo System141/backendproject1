@@ -1,9 +1,51 @@
 """Integration tests for the /api/users endpoints."""
+import uuid
+from datetime import datetime, timedelta, timezone
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_password
-from app.models.domain import User
+from app.models.domain import Auction, AuctionStatus, Category, User
+
+
+class TestSellerStats:
+    """Doc §11.3: Seller Dashboard Overview needs Draft/Under Review/Live/Ended counts."""
+
+    async def test_counts_by_status_bucket(
+        self, async_client: AsyncClient, seller_headers: dict, seller_user: User,
+        test_category: Category, db_session: AsyncSession,
+    ):
+        statuses = [
+            AuctionStatus.draft, AuctionStatus.draft,
+            AuctionStatus.under_review,
+            AuctionStatus.live,
+            AuctionStatus.ended,
+        ]
+        for i, status in enumerate(statuses):
+            db_session.add(Auction(
+                id=str(uuid.uuid4()),
+                seller_id=seller_user.id,
+                category_id=test_category.id,
+                title=f"Stats auction {i}",
+                description="desc for stats test",
+                start_price=100.0,
+                current_price=120.0,
+                min_increment=10.0,
+                start_time=datetime.now(timezone.utc) - timedelta(days=1),
+                end_time=datetime.now(timezone.utc) + timedelta(days=1),
+                status=status,
+            ))
+        await db_session.commit()
+
+        response = await async_client.get("/api/users/me/seller-stats", headers=seller_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["draft_auctions"] == 2
+        assert data["pending_auctions"] == 1
+        assert data["active_auctions"] == 1
+        assert data["completed_auctions"] == 1
+        assert data["total_auctions"] == 5
 
 
 class TestChangePassword:

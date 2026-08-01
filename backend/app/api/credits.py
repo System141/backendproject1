@@ -12,7 +12,7 @@ from app.core.security import get_current_user
 from app.models.domain import User, CreditPurchase, CreditPackage, CreditLedger, CreditLedgerType, PaymentStatus, TermsAcceptance
 from app.schemas.credit import CreditLedgerEntryResponse
 from app.services.credits import apply_ledger_entry, get_or_create_credit_terms
-from app.services.notifications import send_notification, NotificationType
+from app.services.notifications import send_notification, alert_admins, NotificationType
 
 credits_router = APIRouter(prefix="/api/credits", tags=["credits"])
 
@@ -207,6 +207,7 @@ async def monri_credit_callback(
             event_key=f"credit_purchase:{purchase.id}:completed",
             title_me="Kupovina kredita uspješna",
             message_me=f"{purchase.credits_amount:.0f} kredita je dodato na vaš račun.",
+            template_vars={"credits_amount": f"{purchase.credits_amount:.0f}"},
         )
     else:
         await send_notification(
@@ -218,6 +219,18 @@ async def monri_credit_callback(
             event_key=f"credit_purchase:{purchase.id}:failed",
             title_me="Kupovina kredita neuspješna",
             message_me=f"Vaša kupovina od {purchase.credits_amount:.0f} kredita nije mogla biti završena.",
+            template_vars={"credits_amount": f"{purchase.credits_amount:.0f}"},
+        )
+        # doc §19.7: payment webhook failure alert - a declined/failed
+        # gateway callback is worth an ops look (fraud pattern, gateway
+        # misconfig), distinct from the routine user-facing notice above.
+        await alert_admins(
+            db,
+            f"Payment webhook failure: order {order_number}",
+            f"Monri callback reported a failed/declined payment for order '{order_number}' "
+            f"(purchase {purchase.id}, user {purchase.user_id}, {purchase.credits_amount:.0f} credits, "
+            f"response_code={body.get('response_code')!r}).",
+            event_key=f"payment_webhook_failed:{purchase.id}",
         )
 
     return {"status": "ok"}

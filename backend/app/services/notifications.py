@@ -16,7 +16,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.models.domain import Notification, NotificationType, User, Auction
+from app.models.domain import Notification, NotificationType, NotificationTemplate, User, Auction, UserRole
+
+# Doc §17 admin panel checklist: "Notification template management". Only
+# these types can be admin-customized - each entry lists the placeholder
+# names its call site actually passes via template_vars. Wiring more types
+# just means adding them here + passing template_vars at that call site;
+# every other type is untouched (send_notification() ignores templates when
+# template_vars is None, which is the default for every unwired call site).
+TEMPLATABLE_NOTIFICATION_TYPES: dict[NotificationType, list[str]] = {
+    NotificationType.auction_approved: ["auction_title"],
+    NotificationType.auction_rejected: ["auction_title"],
+    NotificationType.listing_changes_requested: ["auction_title", "reason"],
+    NotificationType.credit_purchase_successful: ["credits_amount"],
+    NotificationType.credit_purchase_failed: ["credits_amount"],
+}
 
 
 def _get_smtp_config() -> Optional[dict]:
@@ -58,6 +72,20 @@ def _send_email(to: str, subject: str, body: str):
         pass  # ponytail: silently fail — don't break the app for email
 
 
+def _render_template_field(template_value: Optional[str], template_vars: dict, fallback: str) -> str:
+    """Use the admin's saved template text only if it's set AND every
+    placeholder it references is present in template_vars - a typo'd or
+    stale placeholder (e.g. after a call site's vars change) falls back to
+    today's literal string rather than raising or rendering '{oops}' to a
+    real user."""
+    if not template_value:
+        return fallback
+    try:
+        return template_value.format(**template_vars)
+    except (KeyError, IndexError):
+        return fallback
+
+
 async def send_notification(
     db: AsyncSession,
     user_id: str,
@@ -69,6 +97,7 @@ async def send_notification(
     event_key: Optional[str] = None,
     title_me: Optional[str] = None,
     message_me: Optional[str] = None,
+    template_vars: Optional[dict] = None,
 ):
     """Create an in-app notification and optionally send an email.
 
@@ -85,7 +114,26 @@ async def send_notification(
     is "me". The in-app notification row always stores the (English)
     title/message - the doc only requires the email to match the user's
     language, not the notification-bell text.
+
+    template_vars (doc §17 admin panel: "Notification template management"):
+    pass a dict of the dynamic values this call site's title/message/
+    title_me/message_me were built from (see TEMPLATABLE_NOTIFICATION_TYPES
+    for which types + which var names). If an admin has saved a custom
+    template for this notification_type, its text is used instead - but only
+    per-field, and only when that field's placeholders all resolve from
+    template_vars. This can never silently drop a caller's dynamic content:
+    a field with no saved override, or one whose placeholders don't match,
+    just keeps the literal value the caller already passed.
     """
+    if template_vars is not None:
+        result = await db.execute(select(NotificationTemplate).where(NotificationTemplate.type == notification_type.value))
+        template = result.scalars().first()
+        if template:
+            title = _render_template_field(template.title_en, template_vars, title)
+            message = _render_template_field(template.message_en, template_vars, message)
+            title_me = _render_template_field(template.title_me, template_vars, title_me) if title_me else title_me
+            message_me = _render_template_field(template.message_me, template_vars, message_me) if message_me else message_me
+
     notif = Notification(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -117,3 +165,30 @@ async def send_notification(
             _send_email(user.email, title_me if use_me else title, message_me if use_me else message)
 
     return notif
+
+
+async def alert_admins(db: AsyncSession, title: str, message: str, event_key: Optional[str] = None):
+    """Doc §19.7: 'kritik hata icin admin teknik ekibe uyari uretmeli' - route
+    a system-level failure (bid engine, payment webhook, unhandled 500) to
+    every admin/super_admin as an in-app + email notification, reusing the
+    existing notification infra rather than standing up a separate paging
+    service. event_key dedupes repeated identical alerts the same way normal
+    notifications do (e.g. a scheduler loop hitting the same error every 30s).
+
+    Real external paging (Slack/PagerDuty/uptime monitor) is a LITZOR
+    operational choice (doc §19.1 makes the same call for domain/TLS) - this
+    is the code-completable half: the alert always lands somewhere a human
+    checks (admin notification bell + email) even before that choice is made.
+
+    Notification.event_key is unique *globally*, not per-user - passing the
+    same event_key for every admin in the loop below would let only the
+    first admin's insert claim it and silently drop the rest as "duplicates".
+    Each admin gets their own key (event_key suffixed with their id) so the
+    same underlying incident dedupes per-admin without dropping other admins."""
+    result = await db.execute(select(User.id).where(User.role.in_([UserRole.admin, UserRole.super_admin])))
+    admin_ids = result.scalars().all()
+    for admin_id in admin_ids:
+        await send_notification(
+            db, admin_id, NotificationType.system_alert, title, message,
+            send_email=True, event_key=f"{event_key}:{admin_id}" if event_key else None,
+        )

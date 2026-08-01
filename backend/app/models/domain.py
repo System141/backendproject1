@@ -78,9 +78,16 @@ class User(Base):
     marketing_consent = Column(Boolean, default=False, nullable=False)
     reset_token_hash = Column(String, nullable=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
+    email_verified = Column(Boolean, default=False, nullable=False)  # doc §20 AC-01
+    email_verification_token_hash = Column(String, nullable=True)
+    email_verification_expires_at = Column(DateTime, nullable=True)
     credits_balance = Column(Float, default=0.0)
+    totp_secret = Column(String, nullable=True)  # doc §17.3: admin 2FA, base32 TOTP secret
+    totp_enabled = Column(Boolean, default=False, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     created_at = Column(DateTime, default=_utcnow)
+
+    seller_profile = relationship("SellerProfile", primaryjoin="User.id==SellerProfile.user_id", uselist=False, foreign_keys="SellerProfile.user_id", viewonly=True)
 
 
 class Category(Base):
@@ -133,11 +140,38 @@ class Auction(Base):
     transmission = Column(String, nullable=True)
     damage_status = Column(String, nullable=True)
 
-    # Equipment-specific fields (nullable)
+    # Doc §6.1: categorized known-defects section (vehicle detail). Kept
+    # separate from damage_status (the free-text overall summary) so each
+    # category can be shown/omitted independently on the detail page.
+    defect_exterior = Column(String, nullable=True)
+    defect_interior = Column(String, nullable=True)
+    defect_mechanical = Column(String, nullable=True)
+    defect_tyres = Column(String, nullable=True)
+    defect_missing_parts = Column(String, nullable=True)
+
+    # Equipment-specific fields (nullable). Doc §7.1: also uses
+    # equipment_brand/serial_number/condition/location and the shared
+    # model/year columns above - not repeated here.
     equipment_brand = Column(String, nullable=True)
     serial_number = Column(String, nullable=True)
     condition = Column(String, nullable=True)
     location = Column(String, nullable=True)
+    operating_hours = Column(Integer, nullable=True)
+    engine_power = Column(String, nullable=True)
+    operating_weight = Column(String, nullable=True)
+    service_history = Column(Text, nullable=True)
+    inspection_availability = Column(Boolean, nullable=True)
+
+    # Shared between equipment (§7.1 "dimensions"/"accessories") and
+    # commercial assets (§7.2.2 "dimensions"/"included items") - same
+    # concept under each doc section's own naming.
+    dimensions = Column(String, nullable=True)
+    included_items = Column(Text, nullable=True)
+
+    # Commercial-asset-specific (§7.2.2). Rest of that section's fields
+    # (brand/model/year/condition/serials/location/known defects) reuse the
+    # equipment/vehicle columns above - same concept, no need to duplicate.
+    quantity = Column(Integer, nullable=True)
 
     # Relationships (for reference)
     seller = relationship("User", foreign_keys=[seller_id])
@@ -179,6 +213,8 @@ class AuctionImage(Base):
     sort_order = Column(Integer, default=0)
     media_type = Column(String, nullable=False, default="image")  # image | document
     visibility = Column(String, nullable=False, default="public")  # public | private (admin/seller only)
+    # Doc §6.2: document category, only meaningful when media_type="document".
+    doc_category = Column(String, nullable=True)  # registration | inspection | service | other
 
     auction = relationship("Auction", back_populates="images")
 
@@ -307,6 +343,7 @@ class NotificationType(str, enum.Enum):
     auction_extended = "auction_extended"
     credit_purchase_successful = "credit_purchase_successful"
     credit_purchase_failed = "credit_purchase_failed"
+    system_alert = "system_alert"  # doc §19.7: bid-engine/payment-webhook/unhandled errors -> admin ops alert
 
 
 class Notification(Base):
@@ -327,6 +364,22 @@ class Notification(Base):
 
     user = relationship("User")
     auction = relationship("Auction")
+
+
+class NotificationTemplate(Base):
+    """Doc §17 admin panel checklist: 'Notification template management'.
+    One row per (admin-customized) NotificationType. Only the types listed in
+    TEMPLATABLE_NOTIFICATION_TYPES (app/services/notifications.py) are ever
+    read at send-time - creating a row for any other type is a no-op, since
+    the call site never passes template_vars for it."""
+    __tablename__ = "notification_templates"
+
+    type = Column(String, primary_key=True)  # matches NotificationType.value
+    title_en = Column(Text, nullable=True)
+    message_en = Column(Text, nullable=True)
+    title_me = Column(Text, nullable=True)
+    message_me = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
 class SupportTicket(Base):

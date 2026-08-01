@@ -1,18 +1,22 @@
 import os
 import uuid
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, asc, func
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_user, get_current_seller, get_current_admin
+from app.core.security import get_current_user, get_current_seller, get_current_admin, get_current_user_optional
 from app.models.domain import (
     Auction, AuctionStatus, AuctionImage, AuctionParticipant, Bid, Category, User, UserRole, NotificationType,
     SellerProfile, SellerVerificationStatus, TermsAcceptance, _utcnow, to_naive_utc,
 )
 from app.services.notifications import send_notification
-from app.services.auctions import build_auction_response, generate_lot_code, looks_like_direct_contact, get_or_create_seller_declaration
+from app.services.auctions import (
+    build_auction_response, build_auction_image_response, visible_auction_images,
+    generate_lot_code, looks_like_direct_contact, get_or_create_seller_declaration,
+)
 from app.schemas.auction import (
     AuctionCreateRequest,
     AuctionUpdateRequest,
@@ -34,7 +38,7 @@ async def _get_auction_or_404(db: AsyncSession, auction_id: str) -> Auction:
     result = await db.execute(
         select(Auction)
         .options(selectinload(Auction.images))
-        .options(selectinload(Auction.seller))
+        .options(selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Auction.id == auction_id)
     )
     auction = result.scalars().first()
@@ -108,10 +112,23 @@ async def create_auction(
         fuel_type=req.fuel_type,
         transmission=req.transmission,
         damage_status=req.damage_status,
+        defect_exterior=req.defect_exterior,
+        defect_interior=req.defect_interior,
+        defect_mechanical=req.defect_mechanical,
+        defect_tyres=req.defect_tyres,
+        defect_missing_parts=req.defect_missing_parts,
         equipment_brand=req.equipment_brand,
         serial_number=req.serial_number,
         condition=req.condition,
         location=req.location,
+        operating_hours=req.operating_hours,
+        engine_power=req.engine_power,
+        operating_weight=req.operating_weight,
+        service_history=req.service_history,
+        inspection_availability=req.inspection_availability,
+        dimensions=req.dimensions,
+        included_items=req.included_items,
+        quantity=req.quantity,
         listing_fee=listing_fee,
         lot_code=lot_code,
         contact_flagged=looks_like_direct_contact(req.title, req.description),
@@ -126,7 +143,7 @@ async def create_auction(
     ))
 
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
 
     return _build_auction_response(auction)
 
@@ -140,6 +157,7 @@ async def list_auctions(
     search: str | None = Query(None, min_length=2, description="Search across Lot ID, title, description, brand, model, city (doc §13.1)"),
     city: str | None = Query(None, description="Filter by city/location"),
     seller_id: str | None = Query(None, description="Filter by seller"),
+    seller_type: str | None = Query(None, description="Filter by seller type (dealer, rent-a-car, insurer, construction, individual, ...) (doc §4.1)"),
     winner_user_id: str | None = Query(None, description="Filter by winner"),
     sort_by: str = Query("created_at", pattern=r"^(created_at|end_time|start_price|current_price)$"),
     sort_dir: str = Query("desc", pattern=r"^(asc|desc)$"),
@@ -150,7 +168,7 @@ async def list_auctions(
     """List auctions with optional filters. Public endpoint. Total matching
     count (pre-pagination) is returned in the X-Total-Count header for
     frontend pagination/load-more (doc §4.4)."""
-    query = select(Auction).options(selectinload(Auction.images), selectinload(Auction.seller))
+    query = select(Auction).options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
 
     if category_id:
         query = query.where(Auction.category_id == category_id)
@@ -176,6 +194,10 @@ async def list_auctions(
         query = query.where(Auction.location.ilike(f"%{city}%"))
     if seller_id:
         query = query.where(Auction.seller_id == seller_id)
+    if seller_type:
+        query = query.join(User, User.id == Auction.seller_id).join(
+            SellerProfile, SellerProfile.user_id == User.id
+        ).where(SellerProfile.seller_type.ilike(f"%{seller_type}%"))
     if winner_user_id:
         query = query.where(Auction.winner_user_id == winner_user_id)
 
@@ -242,7 +264,7 @@ async def my_auctions(
     """List current user's own auctions. Seller only."""
     result = await db.execute(
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Auction.seller_id == current_user.id)
         .order_by(desc(Auction.created_at))
     )
@@ -298,8 +320,11 @@ async def joined_auctions(
 async def get_auction(
     auction_id: str,
     db: AsyncSession = Depends(get_db),
+    viewer: Optional[dict] = Depends(get_current_user_optional),
 ):
-    """Get auction detail with images and category info. Public."""
+    """Get auction detail with images and category info. Public - but doc
+    §6.2's private documents are only included for the auction's own seller
+    or staff/admin, never for anyone else (including anonymous visitors)."""
     auction = await _get_auction_or_404(db, auction_id)
 
     # Fetch category
@@ -309,10 +334,11 @@ async def get_auction(
     if cat_obj:
         category = CategoryBrief(id=cat_obj.id, name=cat_obj.name, slug=cat_obj.slug)
 
-    # Build images
+    viewer_user_id = viewer.get("sub") if viewer else None
+    viewer_is_staff = viewer is not None and viewer.get("role") in ("admin", "super_admin", "support")
     images = [
-        AuctionImageResponse(id=img.id, image_url=img.image_url, sort_order=img.sort_order)
-        for img in (auction.images or [])
+        build_auction_image_response(img)
+        for img in visible_auction_images(auction, viewer_user_id, viewer_is_staff)
     ]
 
     base = _build_auction_response(auction)
@@ -349,7 +375,7 @@ async def update_auction(
     auction.contact_flagged = looks_like_direct_contact(auction.title, auction.description)
 
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
 
     return _build_auction_response(auction)
 
@@ -371,7 +397,7 @@ async def submit_auction(
 
     auction.status = AuctionStatus.under_review
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
     return _build_auction_response(auction)
 
 
@@ -410,7 +436,7 @@ async def approve_auction(
 
     auction.status = AuctionStatus.upcoming if auction.start_time > _utcnow() else AuctionStatus.live
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
 
     # Notify seller
     await send_notification(
@@ -422,6 +448,7 @@ async def approve_auction(
         send_email=True,
         title_me=f"Aukcija odobrena: {auction.title}",
         message_me=f"Vaša aukcija '{auction.title}' je odobrena i sada je aktivna.",
+        template_vars={"auction_title": auction.title},
     )
 
     return _build_auction_response(auction)
@@ -448,7 +475,7 @@ async def request_auction_changes(
     auction.status = AuctionStatus.draft
     auction.review_notes = req.reason
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
 
     await send_notification(
         db, auction.seller_id,
@@ -459,6 +486,7 @@ async def request_auction_changes(
         send_email=True,
         title_me=f"Zatražene izmjene: {auction.title}",
         message_me=f"Molimo ažurirajte svoj oglas '{auction.title}': {req.reason}",
+        template_vars={"auction_title": auction.title, "reason": req.reason},
     )
 
     return _build_auction_response(auction)
@@ -514,7 +542,7 @@ async def reject_auction(
 
     auction.status = AuctionStatus.cancelled
     await db.commit()
-    await db.refresh(auction)
+    auction = await _get_auction_or_404(db, auction_id)
 
     # Notify seller
     await send_notification(
@@ -526,6 +554,7 @@ async def reject_auction(
         send_email=True,
         title_me=f"Aukcija odbijena: {auction.title}",
         message_me=f"Vaša aukcija '{auction.title}' je odbijena od strane administratora.",
+        template_vars={"auction_title": auction.title},
     )
 
     return _build_auction_response(auction)

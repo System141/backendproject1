@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import AsyncSessionLocal
 from app.models.domain import Auction, AuctionStatus, AuctionParticipant, BIDDABLE_STATUSES, _utcnow
 from app.services.auctions import finalize_auction
-from app.services.notifications import send_notification, NotificationType
+from app.services.notifications import send_notification, alert_admins, NotificationType
 
 logger = logging.getLogger("bidmont.scheduler")
 
@@ -85,16 +85,36 @@ async def _finalize_expired_auctions():
             expired_auctions = result.scalars().all()
 
             for auction in expired_auctions:
+                # Captured before any rollback below - a rollback expires the
+                # ORM object, and re-reading its attributes afterward would
+                # trigger an unsafe implicit lazy-load (MissingGreenlet).
+                auction_id, auction_title = auction.id, auction.title
                 try:
                     summary = await finalize_auction(db, auction, broadcast=True)
                     logger.info(
-                        f"Auto-finalized auction {auction.id} ('{auction.title}'). "
+                        f"Auto-finalized auction {auction_id} ('{auction_title}'). "
                         f"Winner: {summary.get('winner_user_id') or 'None'}"
                     )
                 except Exception as e:
                     logger.error(
-                        f"Error finalizing auction {auction.id}: {e}",
+                        f"Error finalizing auction {auction_id}: {e}",
                         exc_info=True,
+                    )
+                    # A DB-level failure can leave this session's transaction
+                    # aborted - roll back before reusing it, or the alert
+                    # itself would fail too ("current transaction is aborted").
+                    await db.rollback()
+                    # doc §19.7: bid-engine error alert. event_key scoped to the
+                    # auction + calendar day (not just the auction) so a still-
+                    # broken auction doesn't spam every 30s poll within a day,
+                    # but does re-alert the next day if still unresolved - an
+                    # auction-only key (no date) would fire exactly once ever,
+                    # for the lifetime of that Notification row.
+                    await alert_admins(
+                        db,
+                        f"Bid engine error: auction {auction_id}",
+                        f"Failed to auto-finalize auction '{auction_title}' ({auction_id}): {e}",
+                        event_key=f"bid_engine_error:{auction_id}:{_utcnow().strftime('%Y-%m-%d')}",
                     )
 
     except Exception as e:

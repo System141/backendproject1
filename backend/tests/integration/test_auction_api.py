@@ -28,6 +28,8 @@ class TestCreateAuction:
             "mileage": 50000,
             "fuel_type": "Petrol",
             "transmission": "Automatic",
+            "defect_exterior": "Scratch on rear bumper",
+            "defect_tyres": "Front-right tyre replaced",
             "declaration_accepted": True,
         }
         response = await async_client.post("/api/auctions", json=payload, headers=seller_headers)
@@ -40,6 +42,79 @@ class TestCreateAuction:
         assert data["brand"] == "Toyota"
         assert data["model"] == "Corolla"
         assert data["year"] == 2020
+        # doc §6.1: categorized known-defects fields round-trip; unset categories
+        # stay null rather than defaulting to an empty string or a computed score.
+        assert data["defect_exterior"] == "Scratch on rear bumper"
+        assert data["defect_tyres"] == "Front-right tyre replaced"
+        assert data["defect_interior"] is None
+        assert data["defect_mechanical"] is None
+        assert data["defect_missing_parts"] is None
+
+    async def test_seller_creates_equipment_auction_with_new_fields(
+        self, async_client: AsyncClient, seller_headers: dict, test_category: Category
+    ):
+        """doc §7.1: equipment-specific fields (operating hours, engine/power,
+        weight, dimensions, included items, service history, inspection
+        availability) round-trip through create + response."""
+        payload = {
+            "title": "Test Auction Excavator",
+            "description": "Used excavator for auction",
+            "category_id": test_category.id,
+            "start_price": 15000.0,
+            "min_increment": 200.0,
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "equipment_brand": "Caterpillar",
+            "model": "320D",
+            "year": 2015,
+            "condition": "Used, serviced",
+            "operating_hours": 4200,
+            "engine_power": "122 kW",
+            "operating_weight": "20 t",
+            "dimensions": "9.7m x 2.8m x 3.1m",
+            "included_items": "Extra bucket, spare tracks",
+            "service_history": "Serviced every 500h at authorized dealer",
+            "inspection_availability": True,
+            "declaration_accepted": True,
+        }
+        response = await async_client.post("/api/auctions", json=payload, headers=seller_headers)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["operating_hours"] == 4200
+        assert data["engine_power"] == "122 kW"
+        assert data["operating_weight"] == "20 t"
+        assert data["dimensions"] == "9.7m x 2.8m x 3.1m"
+        assert data["included_items"] == "Extra bucket, spare tracks"
+        assert data["service_history"] == "Serviced every 500h at authorized dealer"
+        assert data["inspection_availability"] is True
+        assert data["quantity"] is None
+
+    async def test_seller_creates_commercial_auction_with_new_fields(
+        self, async_client: AsyncClient, seller_headers: dict, test_category: Category
+    ):
+        """doc §7.2.2: commercial-asset fields (quantity, dimensions, included
+        items) round-trip; equipment-only fields stay null for this category."""
+        payload = {
+            "title": "Test Auction Office Furniture Lot",
+            "description": "Lot of office chairs and desks",
+            "category_id": test_category.id,
+            "start_price": 800.0,
+            "min_increment": 20.0,
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "equipment_brand": "IKEA",
+            "quantity": 25,
+            "condition": "Used, good condition",
+            "dimensions": "Assorted",
+            "included_items": "25 chairs, 10 desks",
+            "declaration_accepted": True,
+        }
+        response = await async_client.post("/api/auctions", json=payload, headers=seller_headers)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["quantity"] == 25
+        assert data["dimensions"] == "Assorted"
+        assert data["included_items"] == "25 chairs, 10 desks"
+        assert data["operating_hours"] is None
+        assert data["engine_power"] is None
 
     async def test_buyer_cannot_create_auction(
         self, async_client: AsyncClient, auth_headers: dict, test_category: Category

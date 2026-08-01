@@ -37,7 +37,18 @@ async def apply_as_seller(
     Submit (or resubmit after rejection) a seller application. A pending or
     already-verified application can't be resubmitted - the admin review
     queue is the single place that state changes.
+
+    Doc §11.2 lists "Phone + email verification" as a required application
+    field. Email verification is enforced here (reuses the §20 AC-01 flow);
+    phone/SMS verification needs an SMS gateway choice, so it isn't gated -
+    see docs/proje-durum-raporu.md's C-list.
     """
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email address before applying as a seller.",
+        )
+
     result = await db.execute(select(SellerProfile).where(SellerProfile.user_id == current_user.id))
     profile = result.scalars().first()
 

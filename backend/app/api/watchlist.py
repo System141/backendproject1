@@ -24,7 +24,7 @@ async def list_watchlist(
     result = await db.execute(
         select(Auction)
         .join(Watchlist, Watchlist.auction_id == Auction.id)
-        .options(selectinload(Auction.images), selectinload(Auction.seller))
+        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Watchlist.user_id == current_user.id)
     )
     return [build_auction_response(a) for a in result.scalars().all()]

@@ -24,12 +24,27 @@ class AuctionCreateRequest(BaseModel):
     fuel_type: Optional[str] = Field(None, max_length=50)
     transmission: Optional[str] = Field(None, max_length=50)
     damage_status: Optional[str] = Field(None, max_length=200)
+    defect_exterior: Optional[str] = Field(None, max_length=500)
+    defect_interior: Optional[str] = Field(None, max_length=500)
+    defect_mechanical: Optional[str] = Field(None, max_length=500)
+    defect_tyres: Optional[str] = Field(None, max_length=500)
+    defect_missing_parts: Optional[str] = Field(None, max_length=500)
 
     # Equipment fields (optional)
     equipment_brand: Optional[str] = Field(None, max_length=100)
     serial_number: Optional[str] = Field(None, max_length=100)
     condition: Optional[str] = Field(None, max_length=100)
     location: Optional[str] = Field(None, max_length=200)
+    operating_hours: Optional[int] = Field(None, ge=0)
+    engine_power: Optional[str] = Field(None, max_length=100)
+    operating_weight: Optional[str] = Field(None, max_length=100)
+    service_history: Optional[str] = Field(None, max_length=2000)
+    inspection_availability: Optional[bool] = None
+    dimensions: Optional[str] = Field(None, max_length=200)
+    included_items: Optional[str] = Field(None, max_length=2000)
+
+    # Commercial-asset fields (optional)
+    quantity: Optional[int] = Field(None, ge=0)
 
 
 # ---------- Update ----------
@@ -49,12 +64,27 @@ class AuctionUpdateRequest(BaseModel):
     fuel_type: Optional[str] = Field(None, max_length=50)
     transmission: Optional[str] = Field(None, max_length=50)
     damage_status: Optional[str] = Field(None, max_length=200)
+    defect_exterior: Optional[str] = Field(None, max_length=500)
+    defect_interior: Optional[str] = Field(None, max_length=500)
+    defect_mechanical: Optional[str] = Field(None, max_length=500)
+    defect_tyres: Optional[str] = Field(None, max_length=500)
+    defect_missing_parts: Optional[str] = Field(None, max_length=500)
 
     # Equipment fields
     equipment_brand: Optional[str] = Field(None, max_length=100)
     serial_number: Optional[str] = Field(None, max_length=100)
     condition: Optional[str] = Field(None, max_length=100)
     location: Optional[str] = Field(None, max_length=200)
+    operating_hours: Optional[int] = Field(None, ge=0)
+    engine_power: Optional[str] = Field(None, max_length=100)
+    operating_weight: Optional[str] = Field(None, max_length=100)
+    service_history: Optional[str] = Field(None, max_length=2000)
+    inspection_availability: Optional[bool] = None
+    dimensions: Optional[str] = Field(None, max_length=200)
+    included_items: Optional[str] = Field(None, max_length=2000)
+
+    # Commercial-asset fields
+    quantity: Optional[int] = Field(None, ge=0)
 
 
 # ---------- Image ----------
@@ -62,6 +92,9 @@ class AuctionImageResponse(BaseModel):
     id: str
     image_url: str
     sort_order: int
+    media_type: str = "image"
+    doc_category: Optional[str] = None
+    visibility: str = "public"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +104,7 @@ class AuctionResponse(BaseModel):
     id: str
     seller_id: str
     seller_name: Optional[str] = None
+    seller_type: Optional[str] = None
     category_id: int
     title: str
     description: str
@@ -96,12 +130,27 @@ class AuctionResponse(BaseModel):
     fuel_type: Optional[str] = None
     transmission: Optional[str] = None
     damage_status: Optional[str] = None
+    defect_exterior: Optional[str] = None
+    defect_interior: Optional[str] = None
+    defect_mechanical: Optional[str] = None
+    defect_tyres: Optional[str] = None
+    defect_missing_parts: Optional[str] = None
 
     # Equipment fields
     equipment_brand: Optional[str] = None
     serial_number: Optional[str] = None
     condition: Optional[str] = None
     location: Optional[str] = None
+    operating_hours: Optional[int] = None
+    engine_power: Optional[str] = None
+    operating_weight: Optional[str] = None
+    service_history: Optional[str] = None
+    inspection_availability: Optional[bool] = None
+    dimensions: Optional[str] = None
+    included_items: Optional[str] = None
+
+    # Commercial-asset fields
+    quantity: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

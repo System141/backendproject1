@@ -9,9 +9,45 @@ from app.core.security import (
     verify_password,
     create_access_token,
     decode_access_token,
+    generate_totp_secret,
+    verify_totp,
+    totp_otpauth_url,
+    _hotp,
     JWT_SECRET,
     JWT_ALGORITHM,
 )
+
+
+class TestTotp:
+    def test_hotp_matches_rfc4226_test_vectors(self):
+        # RFC 4226 Appendix D: HOTP-SHA1 with the ASCII secret "12345678901234567890"
+        import base64
+        secret_b32 = base64.b32encode(b"12345678901234567890").decode()
+        expected = ["755224", "287082", "359152", "969429", "338314"]
+        for counter, code in enumerate(expected):
+            assert _hotp(secret_b32, counter) == code
+
+    def test_verify_totp_accepts_current_code(self):
+        secret = generate_totp_secret()
+        import time
+        counter = int(time.time() // 30)
+        code = _hotp(secret, counter)
+        assert verify_totp(secret, code) is True
+
+    def test_verify_totp_rejects_wrong_code(self):
+        secret = generate_totp_secret()
+        assert verify_totp(secret, "000000") is False
+
+    def test_verify_totp_rejects_empty(self):
+        assert verify_totp(generate_totp_secret(), "") is False
+        assert verify_totp("", "123456") is False
+
+    def test_otpauth_url_contains_secret_and_issuer(self):
+        secret = generate_totp_secret()
+        url = totp_otpauth_url(secret, "admin@bidmont.me")
+        assert url.startswith("otpauth://totp/")
+        assert secret in url
+        assert "BidMont" in url
 
 
 class TestPasswordHashing:

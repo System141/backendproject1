@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.models.domain import Auction, AuctionStatus, Category, Notification, NotificationType, User
 from app.core.security import create_access_token
-from app.services.notifications import send_notification
+from app.services.notifications import send_notification, alert_admins
 
 
 class TestSendNotificationIdempotency:
@@ -44,6 +44,64 @@ class TestSendNotificationIdempotency:
             select(Notification).where(Notification.user_id == test_user.id)
         )
         assert len(result.scalars().all()) == 2
+
+
+class TestAlertAdmins:
+    """Doc §19.7: bid-engine/payment-webhook/unhandled-error alerts must reach
+    every admin, and only admins - reusing the notification system rather
+    than a separate paging service."""
+
+    async def test_notifies_admin_not_buyer(
+        self, db_session: AsyncSession, admin_user: User, test_user: User,
+    ):
+        await alert_admins(db_session, "Test alert", "Something broke")
+
+        admin_notifs = await db_session.execute(
+            select(Notification).where(Notification.user_id == admin_user.id, Notification.type == NotificationType.system_alert)
+        )
+        assert len(admin_notifs.scalars().all()) == 1
+
+        buyer_notifs = await db_session.execute(
+            select(Notification).where(Notification.user_id == test_user.id, Notification.type == NotificationType.system_alert)
+        )
+        assert len(buyer_notifs.scalars().all()) == 0
+
+    async def test_event_key_dedupes_repeated_alerts(self, db_session: AsyncSession, admin_user: User):
+        key = f"test_alert:{uuid.uuid4()}"
+        await alert_admins(db_session, "First", "First message", event_key=key)
+        await alert_admins(db_session, "Second", "Second message", event_key=key)
+
+        result = await db_session.execute(
+            select(Notification).where(Notification.user_id == admin_user.id, Notification.event_key.like(f"{key}%"))
+        )
+        assert len(result.scalars().all()) == 1
+
+    async def test_all_admins_notified_not_just_the_first(self, db_session: AsyncSession, admin_user: User):
+        """Notification.event_key is globally unique, not per-user - a naive
+        implementation that reuses one event_key across every admin would let
+        only the first insert succeed and silently drop the rest."""
+        second_admin = User(
+            id=str(uuid.uuid4()),
+            name="Second Admin",
+            email=f"admin2_{uuid.uuid4().hex[:8]}@example.com",
+            password_hash="$2b$12$dummyhash",
+            role="admin",
+            status="active",
+            accepted_terms=True,
+            accepted_privacy=True,
+            marketing_consent=False,
+        )
+        db_session.add(second_admin)
+        await db_session.commit()
+
+        key = f"multi_admin_alert:{uuid.uuid4()}"
+        await alert_admins(db_session, "Critical failure", "Something broke everywhere", event_key=key)
+
+        for admin in (admin_user, second_admin):
+            result = await db_session.execute(
+                select(Notification).where(Notification.user_id == admin.id, Notification.event_key.like(f"{key}%"))
+            )
+            assert len(result.scalars().all()) == 1, f"admin {admin.email} did not get alerted"
 
 
 class TestPreferredLanguageEmail:

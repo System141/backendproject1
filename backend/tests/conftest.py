@@ -12,6 +12,11 @@ from sqlalchemy.orm import declarative_base
 
 # Set JWT_SECRET before any security imports
 os.environ["JWT_SECRET"] = "test-secret-do-not-use-in-production"
+# forgot-password/verify-email endpoints only expose their raw token in dev
+# mode (app/api/auth.py) - tests exercise that path, matching the documented
+# behavior in CLAUDE.md. Harmless elsewhere: main.py's ENVIRONMENT checks
+# only branch on =="production", so "development" behaves like unset.
+os.environ.setdefault("ENVIRONMENT", "development")
 
 # We need to override the database URL before any app imports resolve the engine
 import app.core.database as db_module
@@ -107,6 +112,7 @@ async def test_user(db_session: AsyncSession) -> User:
         accepted_terms=True,
         accepted_privacy=True,
         marketing_consent=False,
+        email_verified=True,
     )
     db_session.add(user)
     await db_session.commit()
@@ -128,6 +134,7 @@ async def seller_user(db_session: AsyncSession) -> User:
         accepted_terms=True,
         accepted_privacy=True,
         marketing_consent=False,
+        email_verified=True,
         credits_balance=1000.0,  # covers LISTING_FEE_CREDITS so API-level create tests aren't blocked by it
     )
     db_session.add(user)
@@ -160,6 +167,7 @@ async def admin_user(db_session: AsyncSession) -> User:
         accepted_terms=True,
         accepted_privacy=True,
         marketing_consent=False,
+        email_verified=True,
     )
     db_session.add(user)
     await db_session.commit()

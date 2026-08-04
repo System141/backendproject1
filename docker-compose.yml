@@ -41,7 +41,15 @@ services:
     volumes:
       - bidmont-uploads:/app/backend/uploads
     restart: unless-stopped
+    networks:
+      - default
+      - montherapy_net
 
 volumes:
   bidmont-pgdata:
   bidmont-uploads:
+
+networks:
+  default: {}
+  montherapy_net:
+    external: true

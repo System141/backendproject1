@@ -19,7 +19,7 @@ services:
     build: .
     container_name: bidmont-app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - ENVIRONMENT=${ENVIRONMENT:-production}

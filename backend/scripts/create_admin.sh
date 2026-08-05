@@ -19,8 +19,8 @@ if [ -z "${SEED_SECRET:-}" ] && [ -f "$ENV_FILE" ]; then
   SEED_SECRET="$(grep -m1 '^SEED_SECRET=' "$ENV_FILE" | cut -d= -f2-)"
 fi
 : "${SEED_SECRET:?SEED_SECRET not set and not found in $ENV_FILE}"
-EMAIL="${1:-ali@bidmont.me}"
-BASE_URL="${2:-http://145.223.90.15:8000/}"
+EMAIL="${1:-admin@bidmont.me}"
+BASE_URL="${2:-http://localhost:8000/}"
 
 read -rs -p "Admin password: " PASSWORD
 echo

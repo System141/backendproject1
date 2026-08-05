@@ -187,6 +187,40 @@ async def admin_update_user_status(
     )
 
 
+@admin_router.post("/users/{user_id}/verify-email", response_model=UserResponse)
+async def admin_verify_user_email(
+    user_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually mark a user's email as verified. Stopgap until corporate
+    SMTP is live and the self-service verify-email flow can actually
+    deliver mail. Admin only."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.email_verified = True
+    user.email_verification_token_hash = None
+    user.email_verification_expires_at = None
+    await db.commit()
+    await db.refresh(user)
+
+    await _log_audit(db, current_user.id, "verify_user_email", "user", user_id, f"manually verified {user.email}")
+
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        phone=user.phone,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        status=user.status,
+        email_verified=user.email_verified,
+        created_at=str(user.created_at) if user.created_at else "",
+    )
+
+
 # ===================== CATEGORIES =====================
 @admin_router.get("/categories", response_model=list[CategoryResponse])
 async def admin_list_categories(

@@ -258,25 +258,62 @@
     <!-- FAZ 2: Updated Profile Page with API integration & role-based access -->
     <section id="profile" class="page">
       <div class="page-hero"><div class="section"><h2 data-i18n="pr.t">Moj nalog</h2><p data-i18n="pr.d">Upravljajte profilom, pregledajte aukcije i ponude.</p></div></div>
-      <div class="section"><div class="admin-toolbar" id="dashNav" style="margin-bottom:8px"></div><div class="form-wrap">
-        <div class="panel">
+      <div class="section">
+        <div class="panel" style="margin-bottom:20px">
           <div id="profileLoggedIn">
-            <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px">
-              <div><h3 id="profileTitle"></h3>
-              <p class="meta" id="profileMeta" style="margin-top:6px"></p>
-              <span class="pill" id="profileRoleBadge"></span></div>
-              <button class="btn ghost-btn small-btn" id="logoutBtn" data-i18n="pr.out" style="font-size:12px;padding:9px 14px;min-height:unset">Odjava</button>
-            </div>
+            <div><h3 id="profileTitle"></h3>
+            <p class="meta" id="profileMeta" style="margin-top:6px"></p>
+            <span class="pill" id="profileRoleBadge"></span></div>
             <div id="emailVerifyBanner" class="notice" style="display:none;margin-top:14px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
               <span data-i18n="pr.verifyemail.msg">Molimo potvrdite svoju e-mail adresu.</span>
               <button class="btn ghost-btn small-btn" id="resendVerifyBtn" data-i18n="pr.verifyemail.resend" style="font-size:12px;padding:9px 14px;min-height:unset">Pošalji ponovo</button>
             </div>
+            <div class="admin-toolbar" id="dashNav" style="margin-top:18px;margin-bottom:0"></div>
+          </div>
+          <div id="profileLoggedOut">
+            <h3 data-i18n="pr.no">Niste prijavljeni</h3>
+            <p class="meta" style="margin-top:10px" data-i18n="pr.nod">Prijavite se da biste koristili profil.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px"><a href="#login" class="btn dark-btn" data-i18n="l.t">Prijava</a><a href="#register" class="btn ghost-btn" data-i18n="r.t">Registracija</a></div>
+          </div>
+        </div>
+
+        <div class="panel" id="accountTabPanel">
+          <div class="account-tab" data-tab="overview">
+            <h3 data-i18n="pr.tab.overview">Pregled</h3>
             <div style="margin-top:16px;padding:14px;background:var(--surface,#f5f5f5);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
               <div><span style="font-size:13px;color:var(--muted,#888)" data-i18n="pr.credits.label">Krediti za oglašavanje</span><br><strong id="ovCreditsBalance" style="font-size:22px">—</strong></div>
               <div style="display:flex;gap:8px"><a class="btn ghost-btn" href="#credits" style="white-space:nowrap" data-i18n="pr.credits.viewpage">Moji krediti →</a></div>
             </div>
-            <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
-            <h4 id="profileEditSection" style="margin-bottom:14px;font-size:16px" data-i18n="pr.edit">Uredi profil</h4>
+          </div>
+
+          <div class="account-tab" data-tab="bids" style="display:none">
+            <h3 id="myBidsSection" data-i18n="pr.bids">Moje ponude</h3>
+            <div id="myBids" style="overflow-x:auto"></div>
+            <div id="myWonSection" style="display:none;margin-top:20px">
+              <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
+              <h3 data-i18n="pr.won">Osvojene aukcije</h3>
+              <div class="bid-list" id="myWonAuctions"></div>
+            </div>
+          </div>
+
+          <div class="account-tab" data-tab="joined" style="display:none">
+            <h3 id="joinedAuctionsSection" data-i18n="pr.joined">Pridružene aukcije</h3>
+            <div class="bid-list" id="myJoinedAuctions"></div>
+          </div>
+
+          <div class="account-tab" data-tab="watchlist" style="display:none">
+            <h3 id="watchlistSection" data-i18n="pr.watchlist">Praćene aukcije</h3>
+            <div class="bid-list" id="myWatchlist"></div>
+          </div>
+
+          <div class="account-tab" data-tab="notifications" style="display:none">
+            <h3 id="notificationsSection" data-i18n="pr.notif">Obavještenja</h3>
+            <div class="bid-list" id="profileNotifList"></div>
+          </div>
+
+          <div class="account-tab" data-tab="settings" style="display:none">
+            <h4 id="profileEditSection" style="margin-bottom:6px;font-size:16px" data-i18n="pr.edit">Uredi profil</h4>
+            <p class="meta" style="margin-bottom:14px" data-i18n="pr.edit.desc">Ažurirajte svoje lične podatke i preference kontakta.</p>
             <div id="profileError" class="notice danger hidden" style="margin-bottom:12px"></div>
             <div id="profileSuccess" class="notice success hidden" style="margin-bottom:12px"></div>
             <label class="label" data-i18n="r.n">Ime i prezime / Kompanija</label>
@@ -291,39 +328,10 @@
             <select class="select" id="profileLanguage" style="width:100%;margin-bottom:12px"><option value="me" data-i18n="r.lang.me">Crnogorski</option><option value="en" data-i18n="r.lang.en">English</option></select>
             <label class="checkbox-row" style="margin-bottom:14px"><input type="checkbox" id="profileMarketing"> <span data-i18n="r.marketing">Želim da primam promotivne ponude</span></label>
             <button class="btn dark-btn" id="profileSaveBtn" data-i18n="pr.save">Sačuvaj izmjene</button>
-          </div>
-          <div id="profileLoggedOut">
-            <h3 data-i18n="pr.no">Niste prijavljeni</h3>
-            <p class="meta" style="margin-top:10px" data-i18n="pr.nod">Prijavite se da biste koristili profil.</p>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px"><a href="#login" class="btn dark-btn" data-i18n="l.t">Prijava</a><a href="#register" class="btn ghost-btn" data-i18n="r.t">Registracija</a></div>
-          </div>
-        </div>
-        <div class="panel">
-          <h3 id="myBidsSection" data-i18n="pr.bids">Moje ponude</h3>
-          <div id="myBids" style="overflow-x:auto"></div>
-          <div id="myWonSection" style="display:none;margin-top:20px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
-            <h3 data-i18n="pr.won">Osvojene aukcije</h3>
-            <div class="bid-list" id="myWonAuctions"></div>
-          </div>
-          <div style="margin-top:20px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
-            <h3 id="joinedAuctionsSection" data-i18n="pr.joined">Pridružene aukcije</h3>
-            <div class="bid-list" id="myJoinedAuctions"></div>
-          </div>
-          <div style="margin-top:20px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
-            <h3 id="watchlistSection" data-i18n="pr.watchlist">Praćene aukcije</h3>
-            <div class="bid-list" id="myWatchlist"></div>
-          </div>
-          <div style="margin-top:20px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
-            <h3 id="notificationsSection" data-i18n="pr.notif">Obavještenja</h3>
-            <div class="bid-list" id="profileNotifList"></div>
-          </div>
-          <div style="margin-top:20px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">
-            <h3 id="securitySection" data-i18n="pr.security">Bezbjednost</h3>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:26px 0 18px">
+            <h3 id="securitySection" style="margin-bottom:6px" data-i18n="pr.security">Bezbjednost</h3>
+            <p class="meta" style="margin-bottom:14px" data-i18n="pr.security.desc">Odaberite jaku lozinku kako biste zaštitili svoj nalog.</p>
             <div id="pwError" class="notice danger hidden" style="margin:12px 0"></div>
             <div id="pwSuccess" class="notice success hidden" style="margin:12px 0"></div>
             <label class="label" data-i18n="pr.pw.current">Trenutna lozinka</label>
@@ -333,9 +341,14 @@
             <label class="label" data-i18n="pr.pw.confirm">Potvrdi novu lozinku</label>
             <input class="input" id="pwConfirm" type="password" style="width:100%;margin-bottom:12px">
             <button class="btn dark-btn" id="pwSaveBtn" type="button" data-i18n="pr.pw.save">Sačuvaj lozinku</button>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:26px 0 18px">
+            <h3 style="margin-bottom:6px" data-i18n="pr.account.title">Nalog</h3>
+            <p class="meta" style="margin-bottom:14px" data-i18n="pr.account.desc">Odjavite se sa svog naloga na ovom uređaju.</p>
+            <button class="btn ghost-btn" id="logoutBtn" data-i18n="pr.out">Odjava</button>
           </div>
-          <div id="sellerDashboard" style="display:none;margin-top:24px">
-            <hr style="border:none;border-top:1px solid var(--line);margin-bottom:18px">
+
+          <div class="account-tab" id="sellerDashboard" data-tab="listings" style="display:none">
             <h3 data-i18n="pr.seller">Prodavački panel</h3>
             <div id="sellerVerifBadge" class="notice" style="margin-top:10px;display:none"></div>
             <div id="sellerResultsSection" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin-top:14px">
@@ -368,7 +381,7 @@
             </div>
           </div>
         </div>
-      </div></div>
+      </div>
     </section>
 
     <section id="credits" class="page"><div class="page-hero"><div class="section"><h2 data-i18n="cr.t">Moji krediti</h2><p data-i18n="cr.d">Pregled kredit balansa, kupovina paketa i istorija transakcija.</p></div></div><div class="section">
@@ -720,6 +733,7 @@
     auctions=auctions.map(a=>({...a,cat:normalizeCategory(a.cat)})); store.set('bidmont_auctions',auctions);
     let user=store.get('bidmont_user',null);
     let mySellerListingsCache=[]; // doc §11.3: My Listings status filter (Drafts/Under Review/Live/Ended) filters this client-side, no re-fetch per tab
+    let accountTab='overview'; // My Account page: which .account-tab is currently shown
     let sellStep=1, sellPendingFiles=[]; // doc §11.4: create-listing wizard state
     let sellPendingDocs=[]; // doc §6.2: [{file, category}], uploaded after auction creation like photos
     let categoriesMap={}; // id -> {name, parent_id}
@@ -1727,6 +1741,7 @@
       const isLoggedIn = user !== null || bidmontApi.isLoggedIn();
       if(isLoggedIn){
         loggedIn.style.display='block'; loggedOut.style.display='none';
+        const panel=$('#accountTabPanel'); if(panel)panel.style.display='';
         const name = apiUser?.name || user?.name || user?.email || (currentLang==='EN'?'My Account':'Moj nalog');
         const email = apiUser?.email || user?.email || '';
         const role = apiUser?.role || user?.type || 'buyer';
@@ -1813,7 +1828,6 @@
         const dash=$('#sellerDashboard');
         const isSellerRole = role==='seller'||role==='corporate_seller';
         if(dash&&bidmontApi.isLoggedIn()&&isSellerRole){
-          dash.style.display='block';
           bidmontApi._fetch(`${API_BASE}/users/me/seller-stats`).then(s=>{
             $('#ssDraft').textContent=s.draft_auctions;
             $('#ssPending').textContent=s.pending_auctions;
@@ -1833,38 +1847,39 @@
       } else {
         loggedIn.style.display='none'; loggedOut.style.display='block';
         const nav=$('#dashNav'); if(nav)nav.innerHTML='';
+        const panel=$('#accountTabPanel'); if(panel)panel.style.display='none';
       }
     }
-    // Doc §10.1: dashboard navigation (Overview/My Credits/My Bids/Joined Auctions/
-    // Watchlist/Notifications/Profile/Security, + seller-only My Listings/Create
-    // Listing/Results). Every entry scrolls to (or links to) a section that already
-    // renders real data today — no entry points at a view that doesn't exist yet.
+    // Doc §10.1: dashboard navigation (Overview/My Bids/Joined Auctions/Watchlist/
+    // Notifications/Settings, + seller-only My Listings) as real tabs — only the
+    // active tab's panel is shown, instead of everything stacked in one box.
+    // My Credits and Create Listing stay separate pages (linked, not tabbed).
     function renderDashNav(role){
       const nav=$('#dashNav'); if(!nav)return;
       const isSeller = role==='seller'||role==='corporate_seller';
       const L=currentLang==='EN';
-      const items=[
-        ['profileLoggedIn', L?'Overview':'Pregled'],
-        ['#credits', L?'My Credits':'Moji krediti', true],
-        ['myBidsSection', L?'My Bids':'Moje ponude'],
-        ['joinedAuctionsSection', L?'Joined Auctions':'Pridružene aukcije'],
-        ['watchlistSection', L?'Watchlist':'Praćene aukcije'],
-        ['notificationsSection', L?'Notifications':'Obavještenja'],
-        ['profileEditSection', L?'Profile':'Profil'],
-        ['securitySection', L?'Security':'Bezbjednost'],
+      const tabs=[
+        ['overview', L?'Overview':'Pregled'],
+        ['bids', L?'My Bids':'Moje ponude'],
+        ['joined', L?'Joined Auctions':'Pridružene aukcije'],
+        ['watchlist', L?'Watchlist':'Praćene aukcije'],
+        ['notifications', L?'Notifications':'Obavještenja'],
+        ['settings', L?'Settings':'Podešavanja'],
       ];
-      if(isSeller){
-        items.push(['sellerDashboard', L?'My Listings':'Moji oglasi']);
-        items.push(['#sell', L?'Create Listing':'Novi oglas', true]);
-        items.push(['sellerResultsSection', L?'Results':'Rezultati']);
-      }
-      nav.innerHTML=items.map(([target,label,isHref])=>isHref
-        ?`<a class="admin-tab" href="${target}">${label}</a>`
-        :`<button class="admin-tab" type="button" data-scroll="${target}">${label}</button>`
-      ).join('');
-      nav.querySelectorAll('[data-scroll]').forEach(btn=>{
-        btn.addEventListener('click',()=>document.getElementById(btn.dataset.scroll)?.scrollIntoView({behavior:'smooth',block:'start'}));
+      if(isSeller) tabs.push(['listings', L?'My Listings':'Moji oglasi']);
+      else if(accountTab==='listings') accountTab='overview'; // tab only exists for sellers
+      nav.innerHTML=tabs.map(([tab,label])=>`<button class="admin-tab" type="button" data-account-tab="${tab}">${label}</button>`).join('')
+        +`<a class="admin-tab" href="#credits">${L?'My Credits':'Moji krediti'}</a>`
+        +(isSeller?`<a class="admin-tab" href="#sell">${L?'Create Listing':'Novi oglas'}</a>`:'');
+      nav.querySelectorAll('[data-account-tab]').forEach(btn=>{
+        btn.addEventListener('click',()=>switchAccountTab(btn.dataset.accountTab));
       });
+      switchAccountTab(accountTab);
+    }
+    function switchAccountTab(tab){
+      accountTab=tab;
+      $$('.account-tab').forEach(el=>{ el.style.display = el.dataset.tab===tab?'':'none'; });
+      $$('#dashNav [data-account-tab]').forEach(b=>b.classList.toggle('active',b.dataset.accountTab===tab));
     }
     function renderUser(){
       const isApiLoggedIn = bidmontApi.isLoggedIn();
@@ -2401,6 +2416,7 @@
         'lg.t': 'Pravni dokumenti', 'lg.d': 'Uslovi korišćenja, pravila učešća u aukcijama i politike BidMont platforme.', 'lg.tab.terms': 'Uslovi korišćenja', 'lg.tab.rules': 'Pravila učešća', 'lg.tab.credit': 'Uslovi kredita', 'lg.tab.seller': 'Izjava prodavca', 'lg.tab.privacy': 'Politika privatnosti',
         'form.category': 'Kategorija', 'form.cat.account': 'Nalog', 'form.cat.credits': 'Krediti / Plaćanje', 'form.cat.auction': 'Aukcija / Ponuda', 'form.cat.seller': 'Prijava za prodavca', 'form.cat.listing': 'Oglas', 'form.cat.tech': 'Tehnički problem', 'form.cat.other': 'Ostalo', 'form.lot': 'Lot ID (opciono)',
         'pr.joined': 'Pridružene aukcije', 'pr.watchlist': 'Praćene aukcije', 'pr.notif': 'Obavještenja', 'pr.security': 'Bezbjednost', 'pr.pw.current': 'Trenutna lozinka', 'pr.pw.new': 'Nova lozinka', 'pr.pw.confirm': 'Potvrdi novu lozinku', 'pr.pw.save': 'Sačuvaj lozinku',
+        'pr.tab.overview': 'Pregled', 'pr.edit.desc': 'Ažurirajte svoje lične podatke i preference kontakta.', 'pr.security.desc': 'Odaberite jaku lozinku kako biste zaštitili svoj nalog.', 'pr.account.title': 'Nalog', 'pr.account.desc': 'Odjavite se sa svog naloga na ovom uređaju.',
         'sell.declaration': 'Potvrđujem da imam pravo da prodam ovaj predmet, da su unijeti podaci i slike tačni, i da su poznati nedostaci navedeni. *',
         'how.title': 'Aukcijski model za Crnu Goru', 'how.desc': 'Jednostavan proces: objava, provjera, licitiranje, plaćanje i preuzimanje.', 'how.btn': 'Pogledaj proces', 'how.b1': 'Osiguravajuće kuće, flote i prodavci postavljaju aukcije.', 'how.b2': 'Kupci pregledaju fotografije, dokumentaciju i stanje.', 'how.b3': 'Transparentno licitiranje do isteka vremena aukcije.', 'how.b4': 'Pobjednik dobija instrukcije za plaćanje i preuzimanje.',
         'cat.v.t': 'Vehicles', 'cat.v.d': 'Automobili, kombiji, kamioni i havarisana vozila.', 'cat.e.t': 'Equipment', 'cat.e.d': 'Industrijska, građevinska i profesionalna oprema.', 'cat.g.t': 'Commercial Assets', 'cat.g.d': 'Roba, inventar, zalihe i komercijalna dobra: ugostiteljstvo, restoranska oprema, elektronika, kancelarija, maloprodajna oprema, zalihe, namještaj, alati i ostalo.', 'cat.view': 'Pregledaj →',
@@ -2457,6 +2473,7 @@
         'lg.t': 'Legal Documents', 'lg.d': "Terms of use, auction participation rules, and BidMont's policies.", 'lg.tab.terms': 'Terms of Use', 'lg.tab.rules': 'Participation Rules', 'lg.tab.credit': 'Credit Terms', 'lg.tab.seller': 'Seller Declaration', 'lg.tab.privacy': 'Privacy Policy',
         'form.category': 'Category', 'form.cat.account': 'Account', 'form.cat.credits': 'Credits / Payment', 'form.cat.auction': 'Auction / Bid', 'form.cat.seller': 'Seller Application', 'form.cat.listing': 'Listing', 'form.cat.tech': 'Technical Issue', 'form.cat.other': 'Other', 'form.lot': 'Lot ID (optional)',
         'pr.joined': 'Joined Auctions', 'pr.watchlist': 'Watchlist', 'pr.notif': 'Notifications', 'pr.security': 'Security', 'pr.pw.current': 'Current password', 'pr.pw.new': 'New password', 'pr.pw.confirm': 'Confirm new password', 'pr.pw.save': 'Save password',
+        'pr.tab.overview': 'Overview', 'pr.edit.desc': 'Update your personal details and contact preferences.', 'pr.security.desc': 'Choose a strong password to keep your account secure.', 'pr.account.title': 'Account', 'pr.account.desc': 'Sign out of your account on this device.',
         'sell.declaration': 'I confirm that I have the authority to sell this item, that the information and images provided are accurate, and that any known defects have been disclosed. *',
         'how.title': 'Auction Model for Montenegro', 'how.desc': 'Simple process: listing, verification, bidding, payment, and collection.', 'how.btn': 'View Process', 'how.b1': 'Insurance companies, fleets, and sellers list auctions.', 'how.b2': 'Buyers review photos, documentation, and condition.', 'how.b3': 'Transparent bidding until the auction time expires.', 'how.b4': 'The winner receives instructions for payment and collection.',
         'cat.v.t': 'Vehicles', 'cat.v.d': 'Cars, vans, trucks, and damaged vehicles.', 'cat.e.t': 'Equipment', 'cat.e.d': 'Industrial, construction, and professional equipment.', 'cat.g.t': 'Commercial Assets', 'cat.g.d': 'Goods, inventory, stock, and commercial items: hospitality, restaurant equipment, electronics, office, retail equipment, inventory & stock, furniture, tools, and other.', 'cat.view': 'View →',

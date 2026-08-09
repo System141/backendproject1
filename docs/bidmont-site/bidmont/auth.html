@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Log in or create your account — BidMont</title>
+<meta name="description" content="Log in to BidMont or create an account to access verified partner auctions worldwide.">
+<meta name="theme-color" content="#e11b22">
+<link rel="canonical" href="https://bidmont.me/auth.html">
+<meta property="og:title" content="Log in or create your account — BidMont">
+<meta property="og:description" content="Log in to BidMont or create an account to access verified partner auctions worldwide.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="BidMont">
+<meta property="og:url" content="https://bidmont.me/auth.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="https://bidmont.me/assets/img/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Verified partner auctions on BidMont">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+<header class="hdr">
+<div class="wrap hdr__in">
+<a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a>
+<nav class="nav" aria-label="Main"><ul><li><a href="index.html#how">How It Works</a></li><li><a href="credits.html">Buy Credits</a></li><li><a href="auctions.html">Partner Auctions</a></li><li><a href="auctions.html#categories">Categories<svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></a></li><li><a href="index.html#partners">For Partners</a></li><li><a href="credits.html#faq">Resources<svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></a></li></ul></nav>
+<div class="hdr__actions">
+<a class="btn btn--outline btn--sm" href="auth.html">Log in</a>
+<a class="btn btn--primary btn--sm" href="auth.html#create">Sign up</a>
+</div>
+<button class="burger" type="button" data-drawer-open aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu"><svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/></svg></button>
+</div>
+</header>
+
+<div class="drawer" id="mobile-menu" data-drawer>
+<div class="drawer__bg" data-drawer-close></div>
+<div class="drawer__panel" role="dialog" aria-modal="true" aria-label="Menu">
+<div class="drawer__top"><a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a><button class="burger" type="button" data-drawer-close aria-label="Close menu"><svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 6.2 17.8 17.8M17.8 6.2 6.2 17.8"/></svg></button></div>
+<nav class="drawer__nav" aria-label="Mobile"><a href="index.html#how">How It Works</a><a href="credits.html">Buy Credits</a><a href="auctions.html">Partner Auctions</a><a href="auctions.html#categories">Categories</a><a href="index.html#partners">For Partners</a><a href="credits.html#faq">Resources</a></nav>
+<div class="drawer__foot">
+<a class="btn btn--outline btn--block" href="auth.html">Log in</a>
+<a class="btn btn--primary btn--block" href="auth.html#create">Sign up</a>
+</div>
+</div>
+</div>
+<main id="main" class="shell">
+
+<section class="section wrap">
+<div class="auth">
+<div class="auth__form">
+<div class="tabs" role="tablist" aria-label="Account access">
+<button class="tab" id="tab-login" role="tab" aria-selected="true" aria-controls="pane-login" type="button"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20c1.3-3.4 3.9-5.1 7.2-5.1s5.9 1.7 7.2 5.1"/></svg>Log in</button>
+<button class="tab" id="tab-create" role="tab" aria-selected="false" aria-controls="pane-create" type="button" tabindex="-1"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="8.2" r="3.6"/><path d="M3.2 20c1.2-3.3 3.5-4.9 6.8-4.9 1.1 0 2 .2 2.9.5"/><path d="M18 13.5v6M15 16.5h6"/></svg>Create account</button>
+</div>
+
+<div class="pane is-active" id="pane-login" role="tabpanel" aria-labelledby="tab-login">
+<h1 class="h2" style="font-size:24px">Welcome back</h1>
+<p class="lead" style="font-size:13.5px;margin:6px 0 22px">Log in to your BidMont account</p>
+<form novalidate data-form="login">
+<div class="field">
+<label for="login-email">Email address</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="m3.8 7.2 8.2 5.8 8.2-5.8"/></svg><input id="login-email" name="email" type="email" autocomplete="email" placeholder="Enter your email" required></div>
+<p class="field__error">Enter a valid email address.</p>
+</div>
+<div class="field">
+<label for="login-pass">Password</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10" width="15" height="10" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg><input id="login-pass" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+<button class="eye" type="button" data-toggle-pass aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 12S6.1 5.8 12 5.8 21.4 12 21.4 12 17.9 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+<p class="field__error">Enter your password.</p>
+</div>
+<div class="form-row">
+<label class="check"><input type="checkbox" checked><span class="check__box"><svg viewBox="0 0 24 24" width="11" height="11" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg></span><span class="check__label">Remember me</span></label>
+<a class="red" href="#" style="font-size:12.5px;font-weight:600">Forgot password?</a>
+</div>
+<button class="btn btn--primary btn--block btn--lg" type="submit">Log in</button>
+</form>
+<div class="divider">or</div>
+<button class="btn btn--outline btn--block" type="button"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21.4 7.6 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6z"/><path fill="#EA4335" d="M12 4.7c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.2 15.1 0 12 0 7.6 0 3.7 2.6 1.8 6.1l3.8 3a7.1 7.1 0 0 1 6.4-4.4z"/></svg>Continue with Google</button>
+<p class="tiny" style="text-align:center;margin-top:18px">Don&rsquo;t have an account? <button class="red" style="font-weight:600" type="button" data-goto-tab="create">Create account</button></p>
+</div>
+
+<div class="pane" id="pane-create" role="tabpanel" aria-labelledby="tab-create" tabindex="0">
+<div class="stepper" data-stepper>
+<div class="stepper__item is-active" data-step="1"><span class="stepper__dot">1</span><span class="stepper__lbl">Account</span></div>
+<span class="stepper__bar"></span>
+<div class="stepper__item" data-step="2"><span class="stepper__dot">2</span><span class="stepper__lbl">Verify</span></div>
+<span class="stepper__bar"></span>
+<div class="stepper__item" data-step="3"><span class="stepper__dot">3</span><span class="stepper__lbl">Complete</span></div>
+</div>
+
+<div class="pane is-active" data-substep="1">
+<h1 class="h2" style="font-size:24px">Create your account</h1>
+<p class="lead" style="font-size:13.5px;margin:6px 0 22px">Join BidMont to access partner auctions</p>
+<form novalidate data-form="signup">
+<div class="field">
+<label for="su-name">Full name</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20c1.3-3.4 3.9-5.1 7.2-5.1s5.9 1.7 7.2 5.1"/></svg><input id="su-name" name="name" type="text" autocomplete="name" placeholder="Enter your full name" required></div>
+<p class="field__error">Enter your full name.</p>
+</div>
+<div class="field">
+<label for="su-email">Email address</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="m3.8 7.2 8.2 5.8 8.2-5.8"/></svg><input id="su-email" name="email" type="email" autocomplete="email" placeholder="Enter your email" required></div>
+<p class="field__error">Enter a valid email address.</p>
+</div>
+<div class="field">
+<label for="su-phone">Phone number</label>
+<div class="phone">
+<div class="field__wrap"><label class="sr-only" for="su-code">Country code</label>
+<select id="su-code"><option>+90</option><option>+971</option><option>+1</option><option>+44</option><option>+49</option></select><svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></div>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.4 3.4h2.9l1.5 3.9-2 1.5a12 12 0 0 0 6.4 6.4l1.5-2 3.9 1.5v2.9a2 2 0 0 1-2.2 2A16.6 16.6 0 0 1 4.4 5.6a2 2 0 0 1 2-2.2Z"/></svg><input id="su-phone" name="phone" type="tel" autocomplete="tel" placeholder="Enter your phone number" required></div>
+</div>
+<p class="field__error">Enter your phone number.</p>
+</div>
+<div class="field">
+<label for="su-pass">Password</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10" width="15" height="10" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg><input id="su-pass" name="password" type="password" autocomplete="new-password" placeholder="Create a password" required minlength="8">
+<button class="eye" type="button" data-toggle-pass aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 12S6.1 5.8 12 5.8 21.4 12 21.4 12 17.9 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+<p class="field__hint">At least 8 characters, with one number.</p>
+<p class="field__error">Use at least 8 characters, including a number.</p>
+</div>
+<div class="field">
+<label for="su-country">Country</label>
+<div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M3.6 12h16.8"/><path d="M12 3.4a14 14 0 0 1 0 17.2 14 14 0 0 1 0-17.2Z"/></svg><select id="su-country" name="country" required><option>Select your country</option><option>Türkiye</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Germany</option><option>Netherlands</option><option>Singapore</option><option>Montenegro</option></select><svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></div>
+<p class="field__error">Select your country.</p>
+</div>
+<div class="field">
+<label class="check" style="align-items:flex-start"><input type="checkbox" name="terms" required><span class="check__box" style="margin-top:1px"><svg viewBox="0 0 24 24" width="11" height="11" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg></span>
+<span class="check__label tiny">I agree to the <a class="red" href="#" style="font-weight:600;text-decoration:underline">Terms of Service</a> and <a class="red" href="#" style="font-weight:600;text-decoration:underline">Privacy Policy</a></span></label>
+<p class="field__error">Accept the terms to continue.</p>
+</div>
+<button class="btn btn--primary btn--block btn--lg" type="submit">Create account</button>
+</form>
+<p class="tiny" style="text-align:center;margin-top:16px">Already have an account? <button class="red" style="font-weight:600" type="button" data-goto-tab="login">Log in</button></p>
+</div>
+
+<div class="pane" data-substep="2">
+<h2 class="h2" style="font-size:22px">Verify your account</h2>
+<p class="lead" style="font-size:13.5px;margin:6px 0 20px">To keep the platform secure, we need to verify your identity.</p>
+<div class="stack"><button class="upload" type="button" data-upload>
+<span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.2"/><circle cx="8.6" cy="10.8" r="2"/><path d="M5.6 16c.6-1.7 1.6-2.5 3-2.5s2.4.8 3 2.5"/><path d="M14.6 10.2h4M14.6 13.6h4"/></svg></span><span><b>ID document</b><span>Upload a government-issued ID</span></span><span class="chev"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg></span>
+</button><button class="upload" type="button" data-upload>
+<span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 9.4 12 4.2l8.6 5.2"/><path d="M5.6 9.8v9M10 9.8v9M14 9.8v9M18.4 9.8v9"/><path d="M3.4 19.4h17.2"/></svg></span><span><b>Proof of address</b><span>Upload a recent utility bill or bank statement</span></span><span class="chev"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg></span>
+</button><button class="upload" type="button" data-upload>
+<span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="10.2" r="2.6"/><path d="M7.2 18.2c1-2.4 2.6-3.6 4.8-3.6s3.8 1.2 4.8 3.6"/></svg></span><span><b>Selfie verification</b><span>Take a selfie to confirm your identity</span></span><span class="chev"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg></span>
+</button></div>
+<p class="tiny" style="display:flex;gap:7px;align-items:center;justify-content:center;margin-top:20px"><svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10" width="15" height="10" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>Your information is encrypted and secure.</p>
+<div style="display:grid;gap:9px;margin-top:20px">
+<button class="btn btn--primary btn--block btn--lg" type="button" data-next-step>Submit for verification</button>
+<button class="btn btn--outline btn--block" type="button" data-prev-step>Back</button>
+</div>
+</div>
+
+<div class="pane" data-substep="3">
+<div style="text-align:center">
+<span class="success-mark"><svg viewBox="0 0 24 24" width="40" height="40" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg></span>
+<h2 class="h2" style="font-size:22px">Verification submitted</h2>
+<p class="lead" style="font-size:13.5px;margin:8px auto 20px">Thank you. We&rsquo;re reviewing your information and will notify you once your account is verified.</p>
+</div>
+<div class="panel panel--flat">
+<h3 class="h3" style="font-size:14px;margin-bottom:12px">What happens next</h3>
+<ul class="checklist">
+<li><svg viewBox="0 0 24 24" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg>We review your documents</li>
+<li><svg viewBox="0 0 24 24" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg>We verify your information</li>
+<li><svg viewBox="0 0 24 24" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg>We approve your account</li>
+<li><svg viewBox="0 0 24 24" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.6 4.8 4.8L19 6.8"/></svg>You get full access to partner auctions</li>
+</ul>
+</div>
+<a class="btn btn--ghostred btn--block btn--lg" href="index.html" style="margin-top:18px">Back to home</a>
+</div>
+</div>
+</div>
+
+<aside class="auth__side">
+<h2 class="h2">Access <span class="red">verified</span> partner auctions</h2>
+<p class="lead" style="font-size:13.5px;margin-top:8px">Join BidMont to access exclusive partner auctions across vehicles, heavy machinery, marine assets, electronics and more.</p>
+<ul class="side-feats">
+<li><span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.6c0 4.5-3.1 8-7.5 9.4-4.4-1.4-7.5-4.9-7.5-9.4V6z"/><path d="m9 12 2 2 4-4"/></svg></span><div><b>Verified partners</b><span>Work with trusted, pre-vetted auction houses.</span></div></li>
+<li><span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10" width="15" height="10" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg></span><div><b>Secure payments</b><span>Your payments and data are always protected.</span></div></li>
+<li><span class="ic"><svg viewBox="0 0 24 24" width="19" height="19" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.2V12l3.2 2"/></svg></span><div><b>Transparent access</b><span>Clear auction details and fair access for everyone.</span></div></li>
+</ul>
+<img src="assets/img/hero-sm.webp" alt="Assets available through BidMont partner auctions" width="700" height="429" style="border-radius:var(--r);margin-bottom:16px" loading="lazy" decoding="async">
+<div class="notice">
+<span class="ic" style="width:34px;height:34px"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.6c0 4.5-3.1 8-7.5 9.4-4.4-1.4-7.5-4.9-7.5-9.4V6z"/><path d="m9 12 2 2 4-4"/></svg></span>
+<div><b>Account verification required</b><p>Access to partner auctions requires a verified account.</p>
+<a class="red" href="#" style="font-size:12px;font-weight:600;text-decoration:underline">Learn more</a></div>
+</div>
+</aside>
+</div>
+</section>
+
+</main>
+<footer class="ftr">
+<div class="wrap">
+<div class="ftr__grid">
+<div class="ftr__about">
+<a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a>
+<p>Buy verified credits to unlock access to verified partner auctions worldwide.</p>
+<div class="socials"><a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2.2c-2.7 0-3 0-4 .1-1.1 0-1.8.2-2.4.5a4.9 4.9 0 0 0-1.8 1.2A4.9 4.9 0 0 0 2.6 5.8c-.3.6-.4 1.3-.5 2.4-.1 1-.1 1.3-.1 4s0 3 .1 4c0 1.1.2 1.8.5 2.4.3.7.6 1.3 1.2 1.8a4.9 4.9 0 0 0 1.8 1.2c.6.3 1.3.4 2.4.5 1 .1 1.3.1 4 .1s3 0 4-.1c1.1 0 1.8-.2 2.4-.5a5.1 5.1 0 0 0 2.9-2.9c.3-.6.4-1.3.5-2.4.1-1 .1-1.3.1-4s0-3-.1-4c0-1.1-.2-1.8-.5-2.4a4.9 4.9 0 0 0-1.2-1.8 4.9 4.9 0 0 0-1.8-1.2c-.6-.3-1.3-.4-2.4-.5-1-.1-1.3-.1-4-.1zm0 1.8c2.7 0 3 0 4 .1.9 0 1.4.2 1.8.3.4.2.7.4 1 .7.3.3.5.6.7 1 .1.4.3.9.3 1.8.1 1 .1 1.3.1 4s0 3-.1 4c0 .9-.2 1.4-.3 1.8-.2.4-.4.7-.7 1-.3.3-.6.5-1 .7-.4.1-.9.3-1.8.3-1 .1-1.3.1-4 .1s-3 0-4-.1c-.9 0-1.4-.2-1.8-.3a2.7 2.7 0 0 1-1-.7 2.7 2.7 0 0 1-.7-1c-.1-.4-.3-.9-.3-1.8-.1-1-.1-1.3-.1-4s0-3 .1-4c0-.9.2-1.4.3-1.8.2-.4.4-.7.7-1 .3-.3.6-.5 1-.7.4-.1.9-.3 1.8-.3 1-.1 1.3-.1 4-.1z"/><path d="M12 15.3a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6zm0-8.4a5.1 5.1 0 1 0 0 10.2 5.1 5.1 0 0 0 0-10.2z"/><circle cx="17.3" cy="6.7" r="1.2"/></svg></a><a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M13.5 21v-7h2.4l.4-2.9h-2.8V9.3c0-.8.2-1.4 1.4-1.4h1.5V5.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.4-3.7 3.8v2.1H8V14h2.5v7z"/></svg></a><a href="#" aria-label="Linkedin"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.9 8.6H4V21h2.9zM5.4 3.4a1.7 1.7 0 1 0 0 3.5 1.7 1.7 0 0 0 0-3.5zM20 13.8c0-3.2-1.7-4.8-4-4.8a3.4 3.4 0 0 0-3.1 1.7V8.6H10V21h2.9v-6.6c0-1.7.4-3.4 2.5-3.4s2 2 2 3.5V21H20z"/></svg></a><a href="#" aria-label="Youtube"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21.6 7.3s-.2-1.4-.8-2.1c-.8-.8-1.7-.8-2.1-.9C15.9 4 12 4 12 4s-3.9 0-6.7.3c-.4 0-1.3 0-2.1.9-.6.7-.8 2.1-.8 2.1S2.2 9 2.2 10.6v1.6c0 1.7.2 3.3.2 3.3s.2 1.4.8 2.1c.8.8 1.8.8 2.2.9 1.6.2 6.6.3 6.6.3s3.9 0 6.7-.3c.4 0 1.3-.1 2.1-.9.6-.7.8-2.1.8-2.1s.2-1.6.2-3.3v-1.6c0-1.7-.2-3.3-.2-3.3zM9.9 14.3V8.7l5.2 2.8z"/></svg></a></div>
+</div>
+<div class="ftr__col"><h4>Marketplace</h4><ul><li><a href="auctions.html">Partner Auctions</a></li><li><a href="auctions.html#categories">Categories</a></li><li><a href="index.html#how">How It Works</a></li><li><a href="credits.html">Buy Credits</a></li></ul></div><div class="ftr__col"><h4>For Partners</h4><ul><li><a href="index.html#partners">Partner Program</a></li><li><a href="index.html#partners">Sell with Us</a></li><li><a href="credits.html#faq">Resources</a></li><li><a href="index.html#partners">Success Stories</a></li></ul></div><div class="ftr__col"><h4>Company</h4><ul><li><a href="#">About Us</a></li><li><a href="#">Careers</a></li><li><a href="#">News</a></li><li><a href="#">Contact Us</a></li></ul></div><div class="ftr__col"><h4>Support</h4><ul><li><a href="credits.html#faq">Help Center</a></li><li><a href="#">Terms of Use</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Cookie Policy</a></li></ul></div>
+</div>
+<div class="ftr__bar">
+<p>&copy; 2024 BidMont. All rights reserved.</p>
+<div class="ftr__locale">
+<label class="select"><span class="sr-only">Language</span><select><option>English</option><option>Türkçe</option><option>Deutsch</option></select></label>
+<label class="select"><span class="sr-only">Currency</span><select><option>EUR (€)</option><option>USD ($)</option><option>TRY (₺)</option></select></label>
+</div>
+</div>
+</div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Copy the rest of the application
 COPY backend /app/backend/
-COPY index.html /app/index.html
+COPY index.html auctions.html auth.html credits.html auction.html account.html support.html favicon.ico favicon-32.png apple-touch-icon.png robots.txt sitemap.xml /app/
+COPY assets /app/assets/
 
 # Expose the port
 EXPOSE 8000

@@ -143,6 +143,10 @@ app.include_router(sellers_router)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+# Mount the site's own asset bundle (css/js/img) - also before the catch-all
+SITE_DIR = os.path.dirname(os.path.dirname(__file__))
+app.mount("/assets", StaticFiles(directory=os.path.join(SITE_DIR, "assets")), name="assets")
+
 
 # ---- Health check ----
 @app.get("/api/health")
@@ -162,16 +166,25 @@ async def list_categories_public(db: AsyncSession = Depends(get_db)):
     return [{"id": c.id, "name": c.name, "slug": c.slug, "parent_id": c.parent_id, "status": c.status or "active"} for c in cats]
 
 
-# ---- Serve the SPA index.html ----
+# ---- Serve the static site (multi-page, no build step) ----
+# Whitelisted, not a path join off `full_path` - that's user input and
+# `.env` (with JWT_SECRET) lives in this same directory.
+SITE_FILES = {
+    "index.html", "auctions.html", "auth.html", "credits.html", "auction.html", "account.html", "support.html",
+    "favicon.ico", "favicon-32.png", "apple-touch-icon.png",
+    "robots.txt", "sitemap.xml",
+}
+
+
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     # Don't intercept API routes
     if full_path.startswith("api/"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
-    index_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "index.html"
-    )
-    if os.path.exists(index_path):
-        return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
-    return JSONResponse(status_code=404, content={"detail": "index.html not found"})
+    filename = full_path if full_path in SITE_FILES else "index.html"
+    file_path = os.path.join(SITE_DIR, filename)
+    if os.path.exists(file_path):
+        media_type = "text/html" if filename.endswith(".html") else None
+        return FileResponse(file_path, media_type=media_type, headers={"Cache-Control": "no-cache, must-revalidate"})
+    return JSONResponse(status_code=404, content={"detail": "Not found"})

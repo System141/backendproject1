@@ -133,15 +133,30 @@ async def get_current_user(
     return user
 
 
-def get_current_user_optional(
+async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db),
 ) -> Optional[dict]:
-    """Dependency that returns user data from token if present, or None."""
+    """Dependency that returns user data from token if present, or None.
+
+    Security review: re-checks role/status against the DB rather than
+    trusting the JWT's embedded role claim - used to gate private-document
+    downloads (uploads.py) and image visibility (auctions.py), so a
+    demoted/deactivated staff member's still-valid token could otherwise
+    keep elevated access until it expires (up to JWT_EXPIRATION_HOURS)."""
     if credentials is None:
         return None
     payload = decode_access_token(credentials.credentials)
     if payload is None:
         return None
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if user is None or user.status != "active":
+        return None
+    payload["role"] = user.role.value if hasattr(user.role, "value") else str(user.role)
     return payload
 
 

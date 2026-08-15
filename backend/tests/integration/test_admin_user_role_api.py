@@ -83,3 +83,51 @@ async def test_update_role_requires_admin(async_client: AsyncClient, test_user: 
 async def test_update_role_404_for_missing_user(async_client: AsyncClient, admin_headers: dict):
     resp = await async_client.put("/api/admin/users/does-not-exist/role?new_role=seller", headers=admin_headers)
     assert resp.status_code == 404
+
+
+# ---- Security regression: status changes need the same staff-tier gating as
+# role changes (a regular admin banning a super_admin is an equivalent
+# lockout to stripping their role) - see admin_update_user_status. ----
+
+@pytest.mark.asyncio
+async def test_admin_suspends_a_buyer(async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_headers: dict):
+    """A regular admin can freely change a non-staff user's status."""
+    resp = await async_client.put(f"/api/admin/users/{test_user.id}/status?new_status=suspended", headers=admin_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "suspended"
+    await db_session.refresh(test_user)
+    assert test_user.status == "suspended"
+
+
+@pytest.mark.asyncio
+async def test_regular_admin_cannot_ban_a_super_admin(async_client: AsyncClient, db_session: AsyncSession, admin_headers: dict, super_admin_user: User):
+    resp = await async_client.put(f"/api/admin/users/{super_admin_user.id}/status?new_status=banned", headers=admin_headers)
+
+    assert resp.status_code == 403
+    await db_session.refresh(super_admin_user)
+    assert super_admin_user.status == "active"  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_ban_a_regular_admin(async_client: AsyncClient, db_session: AsyncSession, super_admin_headers: dict, admin_user: User):
+    resp = await async_client.put(f"/api/admin/users/{admin_user.id}/status?new_status=banned", headers=super_admin_headers)
+
+    assert resp.status_code == 200
+    await db_session.refresh(admin_user)
+    assert admin_user.status == "banned"
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_change_own_status(async_client: AsyncClient, db_session: AsyncSession, admin_user: User, admin_headers: dict):
+    resp = await async_client.put(f"/api/admin/users/{admin_user.id}/status?new_status=banned", headers=admin_headers)
+
+    assert resp.status_code == 400
+    await db_session.refresh(admin_user)
+    assert admin_user.status == "active"  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_update_status_404_for_missing_user(async_client: AsyncClient, admin_headers: dict):
+    resp = await async_client.put("/api/admin/users/does-not-exist/status?new_status=banned", headers=admin_headers)
+    assert resp.status_code == 404

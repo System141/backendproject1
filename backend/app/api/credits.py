@@ -1,4 +1,6 @@
 import hashlib
+import hmac
+import json
 import os
 import time as _time
 import uuid
@@ -148,13 +150,41 @@ async def create_monri_credit_checkout(
     return {"checkout_url": _monri_base_url(), "form_fields": form_fields}
 
 
+def _verify_monri_callback_signature(raw_body: bytes, auth_header: str | None, merchant_key: str) -> bool:
+    """Per Monri's callback spec (docs.monri.com/docs/how-to-calculate-digest):
+    the merchant server receives an `authorization` header shaped
+    `WP3-callback <digest>` where digest = sha512(merchant_key + raw_body),
+    computed over the exact raw request bytes (not re-serialized JSON)."""
+    prefix = "WP3-callback "
+    if not auth_header or not auth_header.startswith(prefix):
+        return False
+    provided = auth_header[len(prefix):].strip()
+    expected = hashlib.sha512(merchant_key.encode() + raw_body).hexdigest()
+    return hmac.compare_digest(provided, expected)
+
+
 @credits_router.post("/monri/callback")
 async def monri_credit_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    # Doc §8.4/security review: without this, anyone who knows an
+    # order_number (returned to their own browser at checkout time) could
+    # POST a fabricated "approved" callback directly and credit themselves
+    # without ever paying. Verify Monri's signature BEFORE trusting anything
+    # in the body - raw bytes read once since the digest is over the exact
+    # wire payload, not a re-serialized dict.
+    merchant_key = os.getenv("MONRI_MERCHANT_KEY")
+    if not merchant_key:
+        raise HTTPException(status_code=503, detail="Monri not configured")
+
+    raw_body = await request.body()
+    auth_header = request.headers.get("authorization") or request.headers.get("http_authorization")
+    if not _verify_monri_callback_signature(raw_body, auth_header, merchant_key):
+        raise HTTPException(status_code=401, detail="Invalid callback signature")
+
     try:
-        body = await request.json()
+        body = json.loads(raw_body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 

@@ -8,8 +8,10 @@ Design (ponytail: simplest approach):
 """
 import json
 import asyncio
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.security import decode_access_token
+
+AUTH_TIMEOUT_SECONDS = 5
 
 ws_router = APIRouter()
 
@@ -41,7 +43,8 @@ class ConnectionManager:
             self._heartbeat_task = asyncio.create_task(self._heartbeat())
 
     async def connect(self, websocket: WebSocket, auction_id: str, user_id: str):
-        await websocket.accept()
+        # Caller (auction_websocket) already accepted the socket - it has to,
+        # to receive the first-message auth payload before this is called.
         if auction_id not in self.active_connections:
             self.active_connections[auction_id] = {"connections": set(), "user_ids": set()}
         self.active_connections[auction_id]["connections"].add(websocket)
@@ -94,11 +97,25 @@ manager = ConnectionManager()
 async def auction_websocket(
     websocket: WebSocket,
     auction_id: str,
-    token: str = Query(...),
 ):
-    """Connect to live auction updates. Requires a valid JWT as query param."""
-    # Authenticate via token query param
-    payload = decode_access_token(token)
+    """Connect to live auction updates. Security review: the JWT used to
+    ride in the `?token=` query string, which lands in cleartext in server/
+    proxy access logs on every connect. Instead, accept the socket and
+    require the client's first message to be {"type":"auth","token":"..."}
+    within AUTH_TIMEOUT_SECONDS - same secret, never written to a URL."""
+    await websocket.accept()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS)
+        msg = json.loads(raw)
+    except (asyncio.TimeoutError, json.JSONDecodeError, WebSocketDisconnect):
+        await websocket.close(code=4001, reason="Auth timeout")
+        return
+
+    if msg.get("type") != "auth" or not msg.get("token"):
+        await websocket.close(code=4001, reason="First message must be {type: 'auth', token: ...}")
+        return
+
+    payload = decode_access_token(msg["token"])
     if payload is None:
         await websocket.close(code=4001, reason="Invalid or expired token")
         return

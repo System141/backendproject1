@@ -1,4 +1,6 @@
 """Integration tests for the credit ledger + join/bid engine (BidMont Phase 1)."""
+import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -36,6 +38,22 @@ async def _make_buyer(db_session: AsyncSession, credits: float = 0.0) -> User:
 def _headers(user: User) -> dict:
     token = create_access_token(data={"sub": user.id, "role": user.role.value})
     return {"Authorization": f"Bearer {token}"}
+
+
+MONRI_TEST_KEY = "test-key"
+
+
+def _monri_callback_call(async_client: AsyncClient, body: dict):
+    """Sign a fake Monri callback the same way the real gateway does
+    (see credits.py's _verify_monri_callback_signature) so webhook tests
+    exercise the real signature-check path, not a bypass."""
+    raw = json.dumps(body).encode()
+    digest = hashlib.sha512(MONRI_TEST_KEY.encode() + raw).hexdigest()
+    return async_client.post(
+        "/api/credits/monri/callback",
+        content=raw,
+        headers={"Content-Type": "application/json", "Authorization": f"WP3-callback {digest}"},
+    )
 
 
 async def _make_active_auction(db_session: AsyncSession, seller: User, category: Category, **overrides) -> Auction:
@@ -186,8 +204,9 @@ class TestBidIdempotency:
 
 class TestCreditWebhookIdempotency:
     async def test_retried_webhook_credits_once(
-        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User,
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, monkeypatch,
     ):
+        monkeypatch.setenv("MONRI_MERCHANT_KEY", MONRI_TEST_KEY)
         purchase = CreditPurchase(
             id=str(uuid.uuid4()),
             user_id=test_user.id,
@@ -201,17 +220,48 @@ class TestCreditWebhookIdempotency:
 
         body = {"order_number": "order-retry-1", "status": "approved", "response_code": "0000"}
         for _ in range(3):
-            resp = await async_client.post("/api/credits/monri/callback", json=body)
+            resp = await _monri_callback_call(async_client, body)
             assert resp.status_code == 200
 
         await db_session.refresh(test_user)
         assert test_user.credits_balance == 100.0
 
+    async def test_unsigned_webhook_is_rejected(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, monkeypatch,
+    ):
+        """Security regression: a callback with no/forged signature must
+        never credit the account, even for a real pending order_number."""
+        monkeypatch.setenv("MONRI_MERCHANT_KEY", MONRI_TEST_KEY)
+        purchase = CreditPurchase(
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            credits_amount=100.0,
+            amount_eur=10.0,
+            stripe_session_id="order-forged-1",
+            status=PaymentStatus.pending,
+        )
+        db_session.add(purchase)
+        await db_session.commit()
+
+        body = {"order_number": "order-forged-1", "status": "approved", "response_code": "0000"}
+        resp = await async_client.post("/api/credits/monri/callback", json=body)  # no Authorization header
+        assert resp.status_code == 401
+
+        resp = await async_client.post(
+            "/api/credits/monri/callback", json=body,
+            headers={"Authorization": "WP3-callback deadbeef"},
+        )
+        assert resp.status_code == 401
+
+        await db_session.refresh(test_user)
+        assert test_user.credits_balance == 0.0
+
     async def test_failed_payment_alerts_admins(
-        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_user: User,
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_user: User, monkeypatch,
     ):
         """Doc §19.7: a failed/declined webhook callback must alert admin ops,
         distinct from the routine user-facing 'purchase failed' notice."""
+        monkeypatch.setenv("MONRI_MERCHANT_KEY", MONRI_TEST_KEY)
         purchase = CreditPurchase(
             id=str(uuid.uuid4()),
             user_id=test_user.id,
@@ -224,7 +274,7 @@ class TestCreditWebhookIdempotency:
         await db_session.commit()
 
         body = {"order_number": "order-declined-1", "status": "declined", "response_code": "1234"}
-        resp = await async_client.post("/api/credits/monri/callback", json=body)
+        resp = await _monri_callback_call(async_client, body)
         assert resp.status_code == 200
 
         result = await db_session.execute(

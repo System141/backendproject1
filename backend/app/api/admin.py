@@ -3,7 +3,7 @@ import os
 import uuid
 import string as string_module
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, desc, asc, func, text
@@ -14,6 +14,7 @@ from app.core.security import (
     generate_totp_secret, verify_totp, totp_otpauth_url,
 )
 from app.core.migrations import run_migration_raw
+from app.api.auth import limiter
 from app.models.domain import (
     User, UserRole, Auction, AuctionStatus, BIDDABLE_STATUSES, Bid, CreditPurchase, PaymentStatus, SupportTicket,
     Category, AuditLog, CreditPackage, BidIncrementRule, PlatformSettings, AuctionParticipant, AuctionImage,
@@ -64,7 +65,9 @@ def _diff_summary(obj, update_data: dict) -> str:
 
 # ---- Seed Admin (first-run only, uses raw SQL) ----
 @admin_router.post("/seed", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def seed_admin(
+    request: Request,
     email: str = Query("admin@bidmont.me", description="Admin email"),
     password: str = Query(..., min_length=6, description="Admin password"),
     secret: str = Query(..., description="Must match SEED_SECRET env var"),
@@ -77,7 +80,11 @@ async def seed_admin(
 
     await run_migration_raw(db)
 
-    result = await db.execute(text("SELECT id FROM users WHERE role = 'admin' LIMIT 1"))
+    # Security review: was `role = 'admin'` only, so a deployment whose staff
+    # were all promoted to super_admin (possible since admin_update_user_role
+    # shipped) would slip back past this "first-run only" guard and let
+    # /seed mint a brand-new admin. Both staff tiers count as "already seeded".
+    result = await db.execute(text("SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 1"))
     if result.first():
         raise HTTPException(status_code=400, detail="Admin user already exists")
 
@@ -167,11 +174,21 @@ async def admin_update_user_status(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update user status (active/banned/suspended). Admin only."""
+    """Update user status (active/banned/suspended). Admin only.
+
+    Security review: banning/suspending is as much a staff-access lever as
+    the role endpoint below - a regular admin banning a super_admin (or
+    themselves) achieves the same lockout a role change would, so it needs
+    the identical guard (see STAFF_ROLES / admin_update_user_role)."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own status")
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.role in STAFF_ROLES and current_user.role != UserRole.super_admin:
+        raise HTTPException(status_code=403, detail="Only a super_admin can change another staff member's status")
 
     old_status = user.status
     user.status = new_status

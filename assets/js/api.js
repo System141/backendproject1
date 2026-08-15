@@ -51,17 +51,21 @@
     el._hideTimer = setTimeout(function () { el.style.display = "none"; }, 6000);
   }
 
-  var esc = function (s) { return String(s == null ? "" : s); };
-  // esc() does NOT escape HTML — fine everywhere it's currently used (fed to
-  // .alt/.setAttribute, or the seller's own data reflected back to them), but
-  // admin tables render OTHER users' free-text input (name, title, ticket
-  // message...) into innerHTML, which makes esc() an XSS hole there. Use this
-  // instead for any admin-panel string built into innerHTML.
-  var escHtml = function (s) {
+  // Security review: esc() used to be a no-op (String() only), which was an
+  // XSS hole anywhere OTHER users' free text (name, auction title, ticket
+  // message, contact info...) got built into innerHTML — not just admin
+  // tables. esc() now does real HTML-entity escaping; escHtml stays as an
+  // alias so existing call sites (admin panel) are unaffected.
+  var esc = function (s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   };
+  var escHtml = esc;
+  // Raw string coercion (no escaping) for DOM property/attribute assignment
+  // (.alt=, .setAttribute(...)) — those aren't parsed as HTML, so entities
+  // would show up literally (e.g. "&amp;") instead of being decoded.
+  var raw = function (s) { return String(s == null ? "" : s); };
 
   function fmtEUR(n) {
     try {
@@ -251,17 +255,17 @@
       if (imgEl) {
         imgEl.src = "assets/img/" + img + ".webp";
         imgEl.srcset = "assets/img/" + img + "-md.webp 600w, assets/img/" + img + ".webp 1200w";
-        imgEl.alt = esc(a.title);
+        imgEl.alt = raw(a.title);
       }
       var detailHref = "auction.html?id=" + encodeURIComponent(a.id);
       var media = node.querySelector(".auction__media");
-      if (media) { media.setAttribute("aria-label", esc(a.title)); media.setAttribute("href", detailHref); }
+      if (media) { media.setAttribute("aria-label", raw(a.title)); media.setAttribute("href", detailHref); }
       var fav = node.querySelector(".fav");
-      if (fav) fav.setAttribute("aria-label", "Save " + esc(a.title));
+      if (fav) fav.setAttribute("aria-label", "Save " + raw(a.title));
       var partner = node.querySelector(".auction__partner");
-      if (partner) partner.textContent = esc(a.seller_name || "BidMont seller").toUpperCase();
+      if (partner) partner.textContent = raw(a.seller_name || "BidMont seller").toUpperCase();
       var titleLink = node.querySelector(".auction__title a");
-      if (titleLink) { titleLink.textContent = esc(a.title); titleLink.setAttribute("href", detailHref); }
+      if (titleLink) { titleLink.textContent = raw(a.title); titleLink.setAttribute("href", detailHref); }
       var catEl = node.querySelector(".auction__cat");
       if (catEl) catEl.textContent = catName;
       var priceEl = node.querySelector(".auction__meta .val");
@@ -562,8 +566,11 @@
     function connectWS(auctionId) {
       if (!token()) return; // anonymous viewers get no live updates, same as before
       var proto = location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(proto + "//" + location.host + "/ws/auctions/" + auctionId + "?token=" + encodeURIComponent(token()));
-      ws.onopen = function () { wsDelay = 1000; };
+      // Security review: token used to ride in the URL (?token=), which
+      // lands in cleartext access logs. Server now expects it as the first
+      // message instead - see ws.py's auction_websocket.
+      ws = new WebSocket(proto + "//" + location.host + "/ws/auctions/" + auctionId);
+      ws.onopen = function () { wsDelay = 1000; ws.send(JSON.stringify({ type: "auth", token: token() })); };
       ws.onmessage = function (evt) {
         var msg;
         try { msg = JSON.parse(evt.data); } catch (e) { return; }

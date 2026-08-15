@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin panel — BidMont</title>
+<meta name="description" content="BidMont staff panel: users, seller applications, listings, categories and support tickets.">
+<meta name="theme-color" content="#e11b22">
+<link rel="canonical" href="https://bidmont.me/admin.html">
+<meta property="og:title" content="Admin panel — BidMont">
+<meta property="og:description" content="BidMont staff panel: users, seller applications, listings, categories and support tickets.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="BidMont">
+<meta property="og:url" content="https://bidmont.me/admin.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="https://bidmont.me/assets/img/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Verified partner auctions on BidMont">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+<header class="hdr">
+<div class="wrap hdr__in">
+<a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a>
+<nav class="nav" aria-label="Main"><ul><li><a href="index.html#how">How It Works</a></li><li><a href="credits.html">Buy Credits</a></li><li><a href="auctions.html">Auctions</a></li><li><a href="auctions.html#categories">Categories<svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></a></li><li><a href="index.html#partners">For Partners</a></li><li><a href="credits.html#faq">Resources<svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></a></li></ul></nav>
+<div class="notif-wrap is-hidden" id="notif-wrap">
+<button class="fav" type="button" id="notif-bell" aria-haspopup="true" aria-expanded="false" aria-label="Notifications"><svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 3.4 1 5.2 2 6.4a1 1 0 0 1-.8 1.6H4.8A1 1 0 0 1 4 14.4C5 13.2 6 11.4 6 8Z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0"/></svg><span class="notif-badge is-hidden" id="notif-badge">0</span></button>
+<div class="notif-dropdown is-hidden" id="notif-dropdown" role="menu" aria-label="Notifications"><ul id="notif-dropdown-list"><li class="tiny">No notifications.</li></ul></div>
+</div>
+<div class="hdr__actions">
+<a class="btn btn--outline btn--sm" href="auth.html">Log in</a>
+<a class="btn btn--primary btn--sm" href="auth.html#create">Sign up</a>
+</div>
+<button class="burger" type="button" data-drawer-open aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu"><svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/></svg></button>
+</div>
+</header>
+
+<div class="drawer" id="mobile-menu" data-drawer>
+<div class="drawer__bg" data-drawer-close></div>
+<div class="drawer__panel" role="dialog" aria-modal="true" aria-label="Menu">
+<div class="drawer__top"><a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a><button class="burger" type="button" data-drawer-close aria-label="Close menu"><svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 6.2 17.8 17.8M17.8 6.2 6.2 17.8"/></svg></button></div>
+<nav class="drawer__nav" aria-label="Mobile"><a href="index.html#how">How It Works</a><a href="credits.html">Buy Credits</a><a href="auctions.html">Auctions</a><a href="auctions.html#categories">Categories</a><a href="index.html#partners">For Partners</a><a href="credits.html#faq">Resources</a></nav>
+<div class="drawer__foot">
+<a class="btn btn--outline btn--block" href="auth.html">Log in</a>
+<a class="btn btn--primary btn--block" href="auth.html#create">Sign up</a>
+</div>
+</div>
+</div>
+<main id="main" class="shell">
+
+<section class="section--tight wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a><svg viewBox="0 0 24 24" width="13" height="13" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg><span aria-current="page">Admin</span></nav>
+<h1 class="h1" style="font-size:clamp(24px,4vw,32px)">Admin panel</h1>
+</section>
+
+<section class="wrap" style="padding-bottom:36px">
+<div class="panel" id="adm-denied">
+<p class="lead" style="font-size:13.5px">Checking access…</p>
+</div>
+
+<div id="adm-root" class="is-hidden">
+<div class="tabs tabs--scroll" role="tablist" aria-label="Admin sections"><button class="tab" id="tab-adm-overview" role="tab" aria-selected="true" aria-controls="pane-adm-overview" type="button">Overview</button><button class="tab" id="tab-adm-users" role="tab" aria-selected="false" aria-controls="pane-adm-users" type="button" tabindex="-1">Users</button><button class="tab" id="tab-adm-sellers" role="tab" aria-selected="false" aria-controls="pane-adm-sellers" type="button" tabindex="-1">Sellers</button><button class="tab" id="tab-adm-auctions" role="tab" aria-selected="false" aria-controls="pane-adm-auctions" type="button" tabindex="-1">Auctions</button><button class="tab" id="tab-adm-bids" role="tab" aria-selected="false" aria-controls="pane-adm-bids" type="button" tabindex="-1">Bids</button><button class="tab" id="tab-adm-categories" role="tab" aria-selected="false" aria-controls="pane-adm-categories" type="button" tabindex="-1">Categories</button><button class="tab" id="tab-adm-support" role="tab" aria-selected="false" aria-controls="pane-adm-support" type="button" tabindex="-1">Support</button></div>
+
+<div class="pane is-active" id="pane-adm-overview" role="tabpanel" aria-labelledby="tab-adm-overview">
+<div class="features" id="adm-stats"></div>
+</div>
+
+<div class="pane" id="pane-adm-users" role="tabpanel" aria-labelledby="tab-adm-users" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<div class="field" style="margin-bottom:0"><div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.2-4.2"/></svg><input id="adm-users-search" type="text" placeholder="Search name or email"></div></div>
+</div>
+<div id="adm-users-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-sellers" role="tabpanel" aria-labelledby="tab-adm-sellers" tabindex="0">
+<div class="chips" id="adm-sellers-filter" role="group" aria-label="Seller status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="pending">Pending</button>
+<button class="adm-chip" type="button" data-status="verified">Verified</button>
+<button class="adm-chip" type="button" data-status="rejected">Rejected</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-sellers-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-auctions" role="tabpanel" aria-labelledby="tab-adm-auctions" tabindex="0">
+<div class="chips" id="adm-auctions-filter" role="group" aria-label="Auction status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="under_review">Pending review</button>
+<button class="adm-chip" type="button" data-status="upcoming">Upcoming</button>
+<button class="adm-chip" type="button" data-status="live">Live</button>
+<button class="adm-chip" type="button" data-status="ended">Ended</button>
+<button class="adm-chip" type="button" data-status="cancelled">Cancelled</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-auctions-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-bids" role="tabpanel" aria-labelledby="tab-adm-bids" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<div class="field" style="margin-bottom:0"><div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><circle cx="8" cy="16" r="2.6"/><circle cx="16" cy="16" r="2.6"/></svg><select id="adm-bids-auction-filter"><option value="">All auctions</option></select></div></div>
+</div>
+<div id="adm-bids-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-categories" role="tabpanel" aria-labelledby="tab-adm-categories" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<h2 class="h3" style="margin-bottom:10px">New category</h2>
+<form id="adm-category-form">
+<div class="field"><label for="adm-cat-name">Name</label><div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><circle cx="8" cy="16" r="2.6"/><circle cx="16" cy="16" r="2.6"/></svg><input id="adm-cat-name" type="text" required></div></div>
+<div class="field"><label for="adm-cat-slug">Slug</label><div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><circle cx="8" cy="16" r="2.6"/><circle cx="16" cy="16" r="2.6"/></svg><input id="adm-cat-slug" type="text" required placeholder="e.g. heavy-equipment"></div></div>
+<div class="field"><label for="adm-cat-parent">Parent (optional)</label><div class="field__wrap"><svg viewBox="0 0 24 24" width="17" height="17" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><circle cx="8" cy="16" r="2.6"/><circle cx="16" cy="16" r="2.6"/></svg><select id="adm-cat-parent"><option value="">— None —</option></select></div></div>
+<button class="btn btn--primary" type="submit">Add category</button>
+</form>
+</div>
+<div id="adm-categories-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-support" role="tabpanel" aria-labelledby="tab-adm-support" tabindex="0">
+<div class="chips" id="adm-support-filter" role="group" aria-label="Ticket status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="open">Open</button>
+<button class="adm-chip" type="button" data-status="in_progress">In progress</button>
+<button class="adm-chip" type="button" data-status="resolved">Resolved</button>
+<button class="adm-chip" type="button" data-status="closed">Closed</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-support-list"><p class="tiny">Loading…</p></div>
+</div>
+</div>
+</section>
+
+</main>
+<footer class="ftr">
+<div class="wrap">
+<div class="ftr__grid">
+<div class="ftr__about">
+<a class="logo" href="index.html"><img class="logo__img" src="assets/img/logo.webp" srcset="assets/img/logo-sm.webp 436w, assets/img/logo.webp 871w" sizes="152px" alt="BidMont" width="871" height="178" decoding="async"></a>
+<p>Buy verified credits to unlock access to verified partner auctions worldwide.</p>
+<div class="socials"><a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2.2c-2.7 0-3 0-4 .1-1.1 0-1.8.2-2.4.5a4.9 4.9 0 0 0-1.8 1.2A4.9 4.9 0 0 0 2.6 5.8c-.3.6-.4 1.3-.5 2.4-.1 1-.1 1.3-.1 4s0 3 .1 4c0 1.1.2 1.8.5 2.4.3.7.6 1.3 1.2 1.8a4.9 4.9 0 0 0 1.8 1.2c.6.3 1.3.4 2.4.5 1 .1 1.3.1 4 .1s3 0 4-.1c1.1 0 1.8-.2 2.4-.5a5.1 5.1 0 0 0 2.9-2.9c.3-.6.4-1.3.5-2.4.1-1 .1-1.3.1-4s0-3-.1-4c0-1.1-.2-1.8-.5-2.4a4.9 4.9 0 0 0-1.2-1.8 4.9 4.9 0 0 0-1.8-1.2c-.6-.3-1.3-.4-2.4-.5-1-.1-1.3-.1-4-.1zm0 1.8c2.7 0 3 0 4 .1.9 0 1.4.2 1.8.3.4.2.7.4 1 .7.3.3.5.6.7 1 .1.4.3.9.3 1.8.1 1 .1 1.3.1 4s0 3-.1 4c0 .9-.2 1.4-.3 1.8-.2.4-.4.7-.7 1-.3.3-.6.5-1 .7-.4.1-.9.3-1.8.3-1 .1-1.3.1-4 .1s-3 0-4-.1c-.9 0-1.4-.2-1.8-.3a2.7 2.7 0 0 1-1-.7 2.7 2.7 0 0 1-.7-1c-.1-.4-.3-.9-.3-1.8-.1-1-.1-1.3-.1-4s0-3 .1-4c0-.9.2-1.4.3-1.8.2-.4.4-.7.7-1 .3-.3.6-.5 1-.7.4-.1.9-.3 1.8-.3 1-.1 1.3-.1 4-.1z"/><path d="M12 15.3a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6zm0-8.4a5.1 5.1 0 1 0 0 10.2 5.1 5.1 0 0 0 0-10.2z"/><circle cx="17.3" cy="6.7" r="1.2"/></svg></a><a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M13.5 21v-7h2.4l.4-2.9h-2.8V9.3c0-.8.2-1.4 1.4-1.4h1.5V5.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.4-3.7 3.8v2.1H8V14h2.5v7z"/></svg></a><a href="#" aria-label="Linkedin"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.9 8.6H4V21h2.9zM5.4 3.4a1.7 1.7 0 1 0 0 3.5 1.7 1.7 0 0 0 0-3.5zM20 13.8c0-3.2-1.7-4.8-4-4.8a3.4 3.4 0 0 0-3.1 1.7V8.6H10V21h2.9v-6.6c0-1.7.4-3.4 2.5-3.4s2 2 2 3.5V21H20z"/></svg></a><a href="#" aria-label="Youtube"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21.6 7.3s-.2-1.4-.8-2.1c-.8-.8-1.7-.8-2.1-.9C15.9 4 12 4 12 4s-3.9 0-6.7.3c-.4 0-1.3 0-2.1.9-.6.7-.8 2.1-.8 2.1S2.2 9 2.2 10.6v1.6c0 1.7.2 3.3.2 3.3s.2 1.4.8 2.1c.8.8 1.8.8 2.2.9 1.6.2 6.6.3 6.6.3s3.9 0 6.7-.3c.4 0 1.3-.1 2.1-.9.6-.7.8-2.1.8-2.1s.2-1.6.2-3.3v-1.6c0-1.7-.2-3.3-.2-3.3zM9.9 14.3V8.7l5.2 2.8z"/></svg></a></div>
+</div>
+<div class="ftr__col"><h4>Marketplace</h4><ul><li><a href="auctions.html">Auctions</a></li><li><a href="auctions.html#categories">Categories</a></li><li><a href="index.html#how">How It Works</a></li><li><a href="credits.html">Buy Credits</a></li></ul></div><div class="ftr__col"><h4>For Partners</h4><ul><li><a href="index.html#partners">Partner Program</a></li><li><a href="index.html#partners">Sell with Us</a></li><li><a href="credits.html#faq">Resources</a></li><li><a href="index.html#partners">Success Stories</a></li></ul></div><div class="ftr__col"><h4>Company</h4><ul><li><a href="#">About Us</a></li><li><a href="#">Careers</a></li><li><a href="#">News</a></li><li><a href="support.html">Contact Us</a></li></ul></div><div class="ftr__col"><h4>Support</h4><ul><li><a href="credits.html#faq">Help Center</a></li><li><a href="#">Terms of Use</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Cookie Policy</a></li></ul></div>
+</div>
+<div class="ftr__bar">
+<p>&copy; 2024 BidMont. All rights reserved.</p>
+<div class="ftr__locale">
+<label class="select"><span class="sr-only">Language</span><select><option>English</option><option>Türkçe</option><option>Deutsch</option></select></label>
+<label class="select"><span class="sr-only">Currency</span><select><option>EUR (€)</option><option>USD ($)</option><option>TRY (₺)</option></select></label>
+</div>
+</div>
+</div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
+<script src="assets/js/api.js" defer></script>
+</body>
+</html>

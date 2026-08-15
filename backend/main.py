@@ -171,6 +171,7 @@ async def list_categories_public(db: AsyncSession = Depends(get_db)):
 # `.env` (with JWT_SECRET) lives in this same directory.
 SITE_FILES = {
     "index.html", "auctions.html", "auth.html", "credits.html", "auction.html", "account.html", "support.html",
+    "admin.html",
     "favicon.ico", "favicon-32.png", "apple-touch-icon.png",
     "robots.txt", "sitemap.xml",
 }

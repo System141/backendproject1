@@ -90,8 +90,8 @@ async def seed_admin(
 
     await db.execute(
         text("""
-            INSERT INTO users (id, name, email, password_hash, role, status, accepted_terms, accepted_privacy, marketing_consent, created_at, updated_at)
-            VALUES (:id, :name, :email, :password_hash, :role, :status, :accepted_terms, :accepted_privacy, :marketing_consent, NOW(), NOW())
+            INSERT INTO users (id, name, email, password_hash, role, status, accepted_terms, accepted_privacy, marketing_consent, email_verified, totp_enabled, created_at, updated_at)
+            VALUES (:id, :name, :email, :password_hash, :role, :status, :accepted_terms, :accepted_privacy, :marketing_consent, :email_verified, :totp_enabled, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """),
         {
             "id": admin_id,
@@ -103,6 +103,11 @@ async def seed_admin(
             "accepted_terms": True,
             "accepted_privacy": True,
             "marketing_consent": False,
+            # NOT NULL with no DB-level default on a freshly created_all() table (User.email_verified/
+            # totp_enabled use ORM-side default=, not server_default=) — insert explicitly rather than
+            # relying on a column default that only exists after the migrations.py ALTER TABLE path runs.
+            "email_verified": True,
+            "totp_enabled": False,
         },
     )
     await db.commit()
@@ -208,6 +213,61 @@ async def admin_verify_user_email(
     await db.refresh(user)
 
     await _log_audit(db, current_user.id, "verify_user_email", "user", user_id, f"manually verified {user.email}")
+
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        phone=user.phone,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        status=user.status,
+        email_verified=user.email_verified,
+        created_at=str(user.created_at) if user.created_at else "",
+    )
+
+
+# Staff-tier roles: granting OR revoking one of these is a privilege-escalation-
+# adjacent action, so it's gated to super_admin regardless of which side of the
+# change (old role or new role) is the staff one - see admin_update_user_role.
+STAFF_ROLES = (UserRole.admin, UserRole.super_admin, UserRole.support)
+
+
+@admin_router.put("/users/{user_id}/role", response_model=UserResponse)
+async def admin_update_user_role(
+    user_id: str,
+    new_role: str = Query(..., description="One of: buyer, seller, corporate_seller, admin, super_admin, support"),
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change a user's role. A regular admin may only move a user between the
+    non-staff roles (buyer/seller/corporate_seller); touching a staff role -
+    granting admin/super_admin/support, OR changing the role of a user who
+    already holds one - requires super_admin, so a regular (or compromised)
+    admin account can neither mint nor strip staff access. Self-role-change
+    is always blocked, super_admin included."""
+    try:
+        role_enum = UserRole(new_role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {new_role}")
+
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    touches_staff = role_enum in STAFF_ROLES or user.role in STAFF_ROLES
+    if touches_staff and current_user.role != UserRole.super_admin:
+        raise HTTPException(status_code=403, detail="Only a super_admin can grant or change a staff-tier role")
+
+    old_role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    user.role = role_enum
+    await db.commit()
+    await db.refresh(user)
+
+    await _log_audit(db, current_user.id, "update_user_role", "user", user_id, f"role: {old_role!r}->{role_enum.value!r}")
 
     return UserResponse(
         id=user.id,
@@ -740,6 +800,7 @@ async def admin_list_bids(
             user_id=b.user_id,
             amount=b.amount,
             created_at=b.created_at,
+            invalidated=b.invalidated,
         )
         for b in bids
     ]
@@ -792,6 +853,7 @@ async def admin_invalidate_bid(
         user_id=bid.user_id,
         amount=bid.amount,
         created_at=bid.created_at,
+        invalidated=bid.invalidated,
     )
 
 

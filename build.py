@@ -977,10 +977,12 @@ auction_detail_body = f'''
 
 # =================================================================== ACCOUNT ---
 # Shell only, like auction.html — assets/js/api.js's wireAccountPage() fills every
-# #acct-*/pane-* element once it knows who's logged in. The three "grid" tabs
-# (bids/joined/watchlist) get one hidden demo card each so renderAuctionGrid()'s
-# existing container.querySelector(".auction") template-clone trick just works,
-# same as index.html/auctions.html — no changes to that function needed.
+# #acct-*/pane-* element once it knows who's logged in. The "watchlist" grid tab
+# gets one hidden demo card so renderAuctionGrid()'s existing
+# container.querySelector(".auction") template-clone trick just works, same as
+# index.html/auctions.html — no changes to that function needed. "My listings"
+# is seller-owned auctions (with edit/delete/resubmit actions), rendered from
+# scratch by api.js instead — a buyer-facing auction_card has no room for those.
 ACCT_TABS = [("overview", "Overview"), ("bids", "My bids"), ("joined", "Joined"),
              ("watchlist", "Watchlist"), ("notifications", "Notifications"),
              ("settings", "Settings"), ("listings", "My listings")]
@@ -1073,7 +1075,136 @@ account_body = f'''
 
 <div class="pane" id="pane-listings" role="tabpanel" aria-labelledby="tab-listings" tabindex="0">
 <div class="features" id="acct-seller-stats" style="margin-bottom:14px"></div>
-<div class="grid-auctions" id="acct-listings-grid">{auction_card(AUCTIONS[0], 0, lazy=False)}</div>
+<div class="panel" style="margin-bottom:14px">
+<button class="btn btn--outline" type="button" id="acct-listing-new-btn">+ New listing</button>
+<form id="acct-listing-form" class="is-hidden" style="margin-top:14px" novalidate>
+<input type="hidden" id="lst-id">
+<div class="field"><label for="lst-title">Title</label><div class="field__wrap">{i("doc", 17)}<input id="lst-title" type="text" required minlength="3" maxlength="200"></div></div>
+<div class="field"><label for="lst-desc">Description</label><div class="field__wrap" style="align-items:flex-start;padding:10px 12px"><textarea id="lst-desc" rows="4" required minlength="10" maxlength="5000" style="border:0;outline:0;width:100%;font:inherit;resize:vertical;background:transparent"></textarea></div></div>
+<div class="field"><label for="lst-category">Category</label><div class="field__wrap">{i("grid", 17)}<select id="lst-category" required></select></div></div>
+<div class="field"><label for="lst-price">Starting price (EUR)</label><div class="field__wrap">{i("coins", 17)}<input id="lst-price" type="number" min="0.01" step="0.01" required></div></div>
+<div class="field"><label for="lst-increment">Minimum bid increment (EUR)</label><div class="field__wrap">{i("coins", 17)}<input id="lst-increment" type="number" min="0.01" step="0.01" required></div></div>
+<div class="field"><label for="lst-end">Ends at</label><div class="field__wrap">{i("clock", 17)}<input id="lst-end" type="datetime-local" required></div></div>
+<div class="field"><label for="lst-location">Location</label><div class="field__wrap">{i("home", 17)}<input id="lst-location" type="text"></div></div>
+<h3 class="h3" style="margin:14px 0 8px">Item details (optional)</h3>
+<div class="field"><label for="lst-brand">Brand</label><div class="field__wrap">{i("car", 17)}<input id="lst-brand" type="text" maxlength="100"></div></div>
+<div class="field"><label for="lst-model">Model</label><div class="field__wrap">{i("car", 17)}<input id="lst-model" type="text" maxlength="100"></div></div>
+<div class="field"><label for="lst-year">Year</label><div class="field__wrap">{i("clock", 17)}<input id="lst-year" type="number" min="1900" max="2100"></div></div>
+<div class="field"><label for="lst-mileage">Mileage (km)</label><div class="field__wrap">{i("car", 17)}<input id="lst-mileage" type="number" min="0"></div></div>
+<div class="field"><label for="lst-fuel">Fuel type</label><div class="field__wrap">{i("car", 17)}<input id="lst-fuel" type="text" maxlength="50"></div></div>
+<div class="field"><label for="lst-transmission">Transmission</label><div class="field__wrap">{i("car", 17)}<input id="lst-transmission" type="text" maxlength="50"></div></div>
+<div class="field"><label for="lst-equip-brand">Equipment brand</label><div class="field__wrap">{i("package", 17)}<input id="lst-equip-brand" type="text" maxlength="100"></div></div>
+<div class="field"><label for="lst-serial">Serial number</label><div class="field__wrap">{i("package", 17)}<input id="lst-serial" type="text" maxlength="100"></div></div>
+<div class="field"><label for="lst-condition">Condition</label><div class="field__wrap">{i("package", 17)}<input id="lst-condition" type="text" maxlength="100"></div></div>
+<div class="field"><label for="lst-hours">Operating hours</label><div class="field__wrap">{i("clock", 17)}<input id="lst-hours" type="number" min="0"></div></div>
+<div class="field"><label for="lst-quantity">Quantity (commercial goods)</label><div class="field__wrap">{i("package", 17)}<input id="lst-quantity" type="number" min="0"></div></div>
+<div class="field"><label for="lst-photos">Photos</label><div class="field__wrap">{i("doc", 17)}<input id="lst-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="border:0;padding:6px 0"></div></div>
+<div class="field"><label for="lst-doc-category">Document type</label><div class="field__wrap">{i("doc", 17)}<select id="lst-doc-category"><option value="registration">Registration</option><option value="inspection">Inspection</option><option value="service">Service history</option><option value="other">Other</option></select></div></div>
+<div class="field"><label for="lst-documents">Documents (registration, inspection, service — private, staff-reviewed only)</label><div class="field__wrap">{i("doc", 17)}<input id="lst-documents" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="border:0;padding:6px 0"></div></div>
+<label class="check" id="lst-declaration-wrap" style="align-items:flex-start;margin-top:8px"><input type="checkbox" id="lst-declaration"><span class="check__box" style="margin-top:1px">{i("check", 11)}</span>
+<span class="check__label tiny">I confirm I have the authority to list this item and all details given are accurate.</span></label>
+<div style="display:flex;gap:10px;margin-top:12px">
+<button class="btn btn--primary" type="submit" id="lst-submit-btn">Publish listing</button>
+<button class="btn btn--ghostred" type="button" id="acct-listing-cancel-btn">Cancel</button>
+</div>
+</form>
+</div>
+<div id="acct-listings-list"><p class="tiny">Loading…</p></div>
+</div>
+</div>
+</section>
+'''
+
+# ===================================================================== ADMIN ---
+# Shell only, like account.html — assets/js/api.js's wireAdminPage() fills every
+# #adm-*/pane-adm-* element after confirming the viewer is staff (admin/
+# super_admin/support). Every list renders from scratch (table rows built by
+# JS), no clone-trick demo data anywhere — a fabricated row in an admin table
+# is worse than one in a buyer-facing grid, so every pane starts genuinely
+# empty and every fetch path has a real error state.
+ADMIN_TABS = [("overview", "Overview"), ("users", "Users"), ("sellers", "Sellers"),
+              ("auctions", "Auctions"), ("bids", "Bids"), ("categories", "Categories"), ("support", "Support")]
+admin_tabs_nav = "".join(
+    f'<button class="tab" id="tab-adm-{k}" role="tab" aria-selected="{"true" if n == 0 else "false"}" '
+    f'aria-controls="pane-adm-{k}" type="button"{"" if n == 0 else " tabindex=\"-1\""}>{t}</button>'
+    for n, (k, t) in enumerate(ADMIN_TABS))
+
+admin_body = f'''
+<section class="section--tight wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a>{i("chev-r", 13)}<span aria-current="page">Admin</span></nav>
+<h1 class="h1" style="font-size:clamp(24px,4vw,32px)">Admin panel</h1>
+</section>
+
+<section class="wrap" style="padding-bottom:36px">
+<div class="panel" id="adm-denied">
+<p class="lead" style="font-size:13.5px">Checking access…</p>
+</div>
+
+<div id="adm-root" class="is-hidden">
+<div class="tabs tabs--scroll" role="tablist" aria-label="Admin sections">{admin_tabs_nav}</div>
+
+<div class="pane is-active" id="pane-adm-overview" role="tabpanel" aria-labelledby="tab-adm-overview">
+<div class="features" id="adm-stats"></div>
+</div>
+
+<div class="pane" id="pane-adm-users" role="tabpanel" aria-labelledby="tab-adm-users" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<div class="field" style="margin-bottom:0"><div class="field__wrap">{i("search", 17)}<input id="adm-users-search" type="text" placeholder="Search name or email"></div></div>
+</div>
+<div id="adm-users-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-sellers" role="tabpanel" aria-labelledby="tab-adm-sellers" tabindex="0">
+<div class="chips" id="adm-sellers-filter" role="group" aria-label="Seller status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="pending">Pending</button>
+<button class="adm-chip" type="button" data-status="verified">Verified</button>
+<button class="adm-chip" type="button" data-status="rejected">Rejected</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-sellers-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-auctions" role="tabpanel" aria-labelledby="tab-adm-auctions" tabindex="0">
+<div class="chips" id="adm-auctions-filter" role="group" aria-label="Auction status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="under_review">Pending review</button>
+<button class="adm-chip" type="button" data-status="upcoming">Upcoming</button>
+<button class="adm-chip" type="button" data-status="live">Live</button>
+<button class="adm-chip" type="button" data-status="ended">Ended</button>
+<button class="adm-chip" type="button" data-status="cancelled">Cancelled</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-auctions-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-bids" role="tabpanel" aria-labelledby="tab-adm-bids" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<div class="field" style="margin-bottom:0"><div class="field__wrap">{i("grid", 17)}<select id="adm-bids-auction-filter"><option value="">All auctions</option></select></div></div>
+</div>
+<div id="adm-bids-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-categories" role="tabpanel" aria-labelledby="tab-adm-categories" tabindex="0">
+<div class="panel" style="margin-bottom:14px">
+<h2 class="h3" style="margin-bottom:10px">New category</h2>
+<form id="adm-category-form">
+<div class="field"><label for="adm-cat-name">Name</label><div class="field__wrap">{i("grid", 17)}<input id="adm-cat-name" type="text" required></div></div>
+<div class="field"><label for="adm-cat-slug">Slug</label><div class="field__wrap">{i("grid", 17)}<input id="adm-cat-slug" type="text" required placeholder="e.g. heavy-equipment"></div></div>
+<div class="field"><label for="adm-cat-parent">Parent (optional)</label><div class="field__wrap">{i("grid", 17)}<select id="adm-cat-parent"><option value="">— None —</option></select></div></div>
+<button class="btn btn--primary" type="submit">Add category</button>
+</form>
+</div>
+<div id="adm-categories-list"><p class="tiny">Loading…</p></div>
+</div>
+
+<div class="pane" id="pane-adm-support" role="tabpanel" aria-labelledby="tab-adm-support" tabindex="0">
+<div class="chips" id="adm-support-filter" role="group" aria-label="Ticket status filter" style="margin-bottom:14px">
+<button class="adm-chip is-active" type="button" data-status="open">Open</button>
+<button class="adm-chip" type="button" data-status="in_progress">In progress</button>
+<button class="adm-chip" type="button" data-status="resolved">Resolved</button>
+<button class="adm-chip" type="button" data-status="closed">Closed</button>
+<button class="adm-chip" type="button" data-status="">All</button>
+</div>
+<div id="adm-support-list"><p class="tiny">Loading…</p></div>
 </div>
 </div>
 </section>
@@ -1147,6 +1278,9 @@ PAGES = [
     ("support.html", page("Contact support — BidMont",
                           "Get help with your BidMont account, credits, an auction or a listing.",
                           "support", support_body, canonical="support.html")),
+    ("admin.html", page("Admin panel — BidMont",
+                        "BidMont staff panel: users, seller applications, listings, categories and support tickets.",
+                        "admin", admin_body, canonical="admin.html")),
 ]
 
 for fn, html in PAGES:

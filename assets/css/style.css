@@ -583,15 +583,20 @@ body.no-scroll { overflow: hidden; }
 }
 .chips::-webkit-scrollbar { display: none; }
 @media (min-width: 1120px) { .chips { margin-inline: 0; padding-inline: 0; flex-wrap: wrap; overflow: visible; } }
-.chip {
+.chip, .adm-chip {
   display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
   padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line);
   background: #fff; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
   transition: all .18s ease;
 }
-.chip:hover { border-color: var(--red); color: var(--red); }
-.chip.is-active { background: var(--red-50); border-color: var(--red-100); color: var(--red); }
-.chip svg { flex: none; }
+.chip:hover, .adm-chip:hover { border-color: var(--red); color: var(--red); }
+.chip.is-active, .adm-chip.is-active { background: var(--red-50); border-color: var(--red-100); color: var(--red); }
+.chip svg, .adm-chip svg { flex: none; }
+/* .adm-chip is a deliberate copy of .chip, not an alias by shared class -
+   main.js's category-chip handler (`$$(".chip")`) is page-global/unscoped, so
+   admin.html's 3 independent filter groups (sellers/auctions/support) can't
+   use the literal "chip" class without one group's click clearing the other
+   two's active state (see build.py's admin_body, api.js's wireChipFilter). */
 
 .layout-auctions { display: grid; gap: 18px; }
 @media (min-width: 1120px) { .layout-auctions { grid-template-columns: 268px minmax(0, 1fr); gap: 22px; align-items: start; } }

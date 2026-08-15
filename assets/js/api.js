@@ -52,6 +52,16 @@
   }
 
   var esc = function (s) { return String(s == null ? "" : s); };
+  // esc() does NOT escape HTML — fine everywhere it's currently used (fed to
+  // .alt/.setAttribute, or the seller's own data reflected back to them), but
+  // admin tables render OTHER users' free-text input (name, title, ticket
+  // message...) into innerHTML, which makes esc() an XSS hole there. Use this
+  // instead for any admin-panel string built into innerHTML.
+  var escHtml = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  };
 
   function fmtEUR(n) {
     try {
@@ -734,6 +744,11 @@
       }).catch(function () {});
     });
 
+    var LISTING_STATUS_LABEL = {
+      draft: "Changes requested", under_review: "Pending review", upcoming: "Upcoming",
+      live: "Live", extended: "Live", ended: "Ended", cancelled: "Cancelled",
+    };
+
     function loadSellerListings(categoriesById) {
       api("/users/me/seller-stats").then(function (stats) {
         var el = document.getElementById("acct-seller-stats");
@@ -742,9 +757,204 @@
           return '<div class="feature"><div><b>' + esc(stats[k]) + "</b><span>" + esc(k.replace(/_/g, " ")) + "</span></div></div>";
         }).join("");
       }).catch(function () {});
-      api("/auctions/my").then(function (items) {
-        renderAuctionGrid("#acct-listings-grid", items, categoriesById, "You haven't listed anything yet.");
-      }).catch(function () {});
+
+      var categorySelect = document.getElementById("lst-category");
+      if (categorySelect) {
+        categorySelect.innerHTML = Object.keys(categoriesById).map(function (id) {
+          return '<option value="' + id + '">' + esc(categoriesById[id].name) + "</option>";
+        }).join("");
+      }
+
+      function refreshListings() {
+        var el = document.getElementById("acct-listings-list");
+        if (!el) return;
+        api("/auctions/my").then(function (items) {
+          if (!items.length) { el.innerHTML = '<p class="tiny">You haven\'t listed anything yet.</p>'; return; }
+          el.innerHTML = items.map(renderListingCard).join("");
+        }).catch(function () {
+          el.innerHTML = '<p class="tiny">Failed to load your listings.</p>';
+        });
+      }
+
+      function renderListingCard(a) {
+        var badge = LISTING_STATUS_LABEL[a.status] || a.status;
+        var canEdit = a.status === "under_review" || a.status === "draft";
+        var actions = '<a class="btn btn--outline btn--sm" href="auction.html?id=' + encodeURIComponent(a.id) + '">View</a>';
+        if (canEdit) {
+          actions += ' <button class="btn btn--outline btn--sm" type="button" data-edit-listing="' + a.id + '">Edit</button>' +
+            ' <button class="btn btn--ghostred btn--sm" type="button" data-delete-listing="' + a.id + '">Delete</button>';
+        }
+        if (a.status === "draft") {
+          actions += ' <button class="btn btn--primary btn--sm" type="button" data-resubmit-listing="' + a.id + '">Resubmit</button>';
+        }
+        var notes = a.status === "draft" && a.review_notes
+          ? '<p class="tiny" style="color:#9f1239;margin-top:6px">Admin: ' + escHtml(a.review_notes) + "</p>" : "";
+        return '<div class="panel" style="margin-bottom:10px">' +
+          '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">' +
+          '<div><b>' + escHtml(a.title) + '</b><br><span class="tiny">' + escHtml(badge) + " · " + fmtEUR(a.current_price) + "</span></div>" +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' + actions + "</div></div>" + notes + "</div>";
+      }
+
+      function uploadListingPhotos(auctionId, fileList) {
+        var fd = new FormData();
+        for (var idx = 0; idx < fileList.length; idx++) fd.append("files", fileList[idx]);
+        return fetch(API_BASE + "/uploads/batch?auction_id=" + encodeURIComponent(auctionId), {
+          method: "POST",
+          headers: token() ? { Authorization: "Bearer " + token() } : {},
+          body: fd,
+        }).then(function (res) {
+          if (!res.ok) throw new Error("Listing saved, but photo upload failed.");
+          return res.json();
+        });
+      }
+
+      function uploadListingDocuments(auctionId, fileList, docCategory) {
+        var fd = new FormData();
+        for (var idx = 0; idx < fileList.length; idx++) fd.append("files", fileList[idx]);
+        var qs = "auction_id=" + encodeURIComponent(auctionId) + "&doc_category=" + encodeURIComponent(docCategory);
+        return fetch(API_BASE + "/uploads/documents?" + qs, {
+          method: "POST",
+          headers: token() ? { Authorization: "Bearer " + token() } : {},
+          body: fd,
+        }).then(function (res) {
+          if (!res.ok) throw new Error("Listing saved, but document upload failed.");
+          return res.json();
+        });
+      }
+
+      function showListingForm() {
+        var form = document.getElementById("acct-listing-form");
+        if (form) form.classList.remove("is-hidden");
+      }
+      function hideListingForm() {
+        var form = document.getElementById("acct-listing-form");
+        if (!form) return;
+        form.classList.add("is-hidden");
+        form.reset();
+        document.getElementById("lst-id").value = "";
+        document.getElementById("lst-submit-btn").textContent = "Publish listing";
+      }
+
+      function openListingForEdit(id) {
+        api("/auctions/" + id).then(function (a) {
+          document.getElementById("lst-id").value = a.id;
+          document.getElementById("lst-title").value = a.title || "";
+          document.getElementById("lst-desc").value = a.description || "";
+          document.getElementById("lst-category").value = a.category_id;
+          document.getElementById("lst-price").value = a.start_price;
+          document.getElementById("lst-increment").value = a.min_increment;
+          // <input type="datetime-local"> reads/writes in local time, but end_time is UTC —
+          // shift by the local offset before formatting, or every edit drags the deadline
+          // toward the browser's UTC offset (see submit handler for the inverse conversion).
+          var endLocal = new Date(a.end_time + "Z");
+          endLocal = new Date(endLocal.getTime() - endLocal.getTimezoneOffset() * 60000);
+          document.getElementById("lst-end").value = endLocal.toISOString().slice(0, 16);
+          document.getElementById("lst-location").value = a.location || "";
+          document.getElementById("lst-brand").value = a.brand || "";
+          document.getElementById("lst-model").value = a.model || "";
+          document.getElementById("lst-year").value = a.year || "";
+          document.getElementById("lst-mileage").value = a.mileage || "";
+          document.getElementById("lst-fuel").value = a.fuel_type || "";
+          document.getElementById("lst-transmission").value = a.transmission || "";
+          document.getElementById("lst-equip-brand").value = a.equipment_brand || "";
+          document.getElementById("lst-serial").value = a.serial_number || "";
+          document.getElementById("lst-condition").value = a.condition || "";
+          document.getElementById("lst-hours").value = a.operating_hours || "";
+          document.getElementById("lst-quantity").value = a.quantity || "";
+          document.getElementById("lst-submit-btn").textContent = "Save changes";
+          showListingForm();
+          document.getElementById("acct-listing-form").scrollIntoView({ behavior: "smooth", block: "center" });
+        }).catch(function (err) { banner(err.message || "Failed to load listing.", "error"); });
+      }
+
+      var newBtn = document.getElementById("acct-listing-new-btn");
+      if (newBtn) newBtn.addEventListener("click", function () {
+        hideListingForm();
+        showListingForm();
+      });
+      var cancelBtn = document.getElementById("acct-listing-cancel-btn");
+      if (cancelBtn) cancelBtn.addEventListener("click", hideListingForm);
+
+      var listingsList = document.getElementById("acct-listings-list");
+      if (listingsList) listingsList.addEventListener("click", function (e) {
+        var editBtn = e.target.closest("[data-edit-listing]");
+        var delBtn = e.target.closest("[data-delete-listing]");
+        var subBtn = e.target.closest("[data-resubmit-listing]");
+        if (editBtn) { openListingForEdit(editBtn.getAttribute("data-edit-listing")); return; }
+        if (delBtn) {
+          if (!confirm("Delete this listing? This cannot be undone.")) return;
+          api("/auctions/" + delBtn.getAttribute("data-delete-listing"), { method: "DELETE" })
+            .then(refreshListings).catch(function (err) { banner(err.message || "Failed to delete listing.", "error"); });
+          return;
+        }
+        if (subBtn) {
+          api("/auctions/" + subBtn.getAttribute("data-resubmit-listing") + "/submit", { method: "POST" })
+            .then(refreshListings).catch(function (err) { banner(err.message || "Failed to resubmit listing.", "error"); });
+        }
+      });
+
+      var listingForm = document.getElementById("acct-listing-form");
+      if (listingForm) listingForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var id = document.getElementById("lst-id").value;
+        if (!id && !document.getElementById("lst-declaration").checked) {
+          banner("Confirm the seller declaration to publish.", "error");
+          return;
+        }
+        var body = {
+          title: document.getElementById("lst-title").value.trim(),
+          description: document.getElementById("lst-desc").value.trim(),
+          category_id: parseInt(document.getElementById("lst-category").value, 10),
+          start_price: parseFloat(document.getElementById("lst-price").value),
+          min_increment: parseFloat(document.getElementById("lst-increment").value),
+          end_time: new Date(document.getElementById("lst-end").value).toISOString(),
+          // null (not undefined) so clearing a field on an edit actually clears it server-side —
+          // PUT uses exclude_unset, so an omitted key leaves the old value untouched.
+          location: document.getElementById("lst-location").value.trim() || null,
+          brand: document.getElementById("lst-brand").value.trim() || null,
+          model: document.getElementById("lst-model").value.trim() || null,
+          year: document.getElementById("lst-year").value ? parseInt(document.getElementById("lst-year").value, 10) : null,
+          mileage: document.getElementById("lst-mileage").value ? parseInt(document.getElementById("lst-mileage").value, 10) : null,
+          fuel_type: document.getElementById("lst-fuel").value.trim() || null,
+          transmission: document.getElementById("lst-transmission").value.trim() || null,
+          equipment_brand: document.getElementById("lst-equip-brand").value.trim() || null,
+          serial_number: document.getElementById("lst-serial").value.trim() || null,
+          condition: document.getElementById("lst-condition").value.trim() || null,
+          operating_hours: document.getElementById("lst-hours").value ? parseInt(document.getElementById("lst-hours").value, 10) : null,
+          quantity: document.getElementById("lst-quantity").value ? parseInt(document.getElementById("lst-quantity").value, 10) : null,
+        };
+        if (!id) body.declaration_accepted = true;
+
+        var submitBtn = document.getElementById("lst-submit-btn");
+        submitBtn.disabled = true; // guard against double-click double-charging the listing fee
+        var req = id ? api("/auctions/" + id, { method: "PUT", body: body }) : api("/auctions", { method: "POST", body: body });
+        req.then(function (auction) {
+          // The auction is already created/charged at this point — an upload failure here
+          // is a warning, not a reason to let the seller re-submit and get charged again.
+          var photoFiles = document.getElementById("lst-photos").files;
+          var photos = photoFiles.length
+            ? uploadListingPhotos(auction.id, photoFiles).catch(function (err) {
+                banner(err.message || "Listing saved, but photo upload failed.", "error");
+              })
+            : Promise.resolve();
+          var docFiles = document.getElementById("lst-documents").files;
+          var docCategory = document.getElementById("lst-doc-category").value;
+          var docs = docFiles.length
+            ? uploadListingDocuments(auction.id, docFiles, docCategory).catch(function (err) {
+                banner(err.message || "Listing saved, but document upload failed.", "error");
+              })
+            : Promise.resolve();
+          return Promise.all([photos, docs]);
+        }).then(function () {
+          banner(id ? "Listing updated." : "Listing submitted for review.");
+          hideListingForm();
+          refreshListings();
+        }).catch(function (err) {
+          banner(err.message || "Failed to save listing.", "error");
+        }).then(function () { submitBtn.disabled = false; });
+      });
+
+      refreshListings();
     }
 
     var profileForm = document.getElementById("acct-profile-form");
@@ -899,6 +1109,477 @@
     });
   }
 
+  /* ----------------------------------------------------------------- admin */
+  function wireAdminPage() {
+    var root = document.getElementById("adm-root");
+    if (!root) return; // only on admin.html
+
+    var STAFF_ROLES = { admin: 1, super_admin: 1, support: 1 };
+    var deniedEl = document.getElementById("adm-denied");
+    // Shared cache: user id -> {name, email, ...}, filled once up front so the
+    // Sellers/Support tabs can show a name instead of a raw id (neither
+    // SellerProfileResponse nor SupportTicketResponse carries the applicant's
+    // name — only user_id).
+    var usersById = {};
+    // Same idea for the Bids tab: BidResponse only carries auction_id, not
+    // the auction's title/lot_code.
+    var auctionsById = {};
+    var viewerRole = null; // read by wireUsersTab to hide staff-role options a non-super_admin can't grant anyway
+
+    function showLoginPrompt() {
+      deniedEl.innerHTML = '<p class="lead" style="font-size:13.5px">Log in with a staff account to see this page.</p>' +
+        '<a class="btn btn--primary" href="auth.html" style="margin-top:12px">Log in</a>';
+    }
+
+    if (!token()) { showLoginPrompt(); return; }
+
+    api("/users/me").then(function (user) {
+      if (!STAFF_ROLES[user.role]) {
+        deniedEl.innerHTML = '<p class="lead" style="font-size:13.5px">Your account doesn\'t have staff access.</p>';
+        return;
+      }
+      viewerRole = user.role;
+      deniedEl.classList.add("is-hidden");
+      root.classList.remove("is-hidden");
+
+      // Every tab except Support/2FA is gated to get_current_admin server-side
+      // (see backend/app/api/admin.py) - support-role staff would otherwise
+      // land on a panel where 6 of 7 tabs silently 403. Hide those tabs and
+      // land on Support instead of offering dead ends.
+      if (viewerRole === "support") {
+        ["overview", "users", "sellers", "auctions", "bids", "categories"].forEach(function (k) {
+          var tabBtn = document.getElementById("tab-adm-" + k);
+          var pane = document.getElementById("pane-adm-" + k);
+          // aria-hidden + tabIndex -1, not just display:none - main.js's
+          // selectTab() arrow-key handler walks all [role="tab"] elements
+          // regardless of visibility, so a hidden-but-still-focusable button
+          // would let keyboard nav land on an empty, unwired pane.
+          if (tabBtn) { tabBtn.style.display = "none"; tabBtn.setAttribute("aria-hidden", "true"); tabBtn.tabIndex = -1; }
+          if (pane) pane.classList.remove("is-active");
+        });
+        var supportTab = document.getElementById("tab-adm-support");
+        var supportPane = document.getElementById("pane-adm-support");
+        if (supportTab) { supportTab.setAttribute("aria-selected", "true"); supportTab.tabIndex = 0; }
+        if (supportPane) supportPane.classList.add("is-active");
+        wireSupportTab();
+        return;
+      }
+
+      loadOverview();
+
+      // Seed usersById/auctionsById before the tabs that need them render, so
+      // the first paint shows names rather than ids (not just a self-heal on
+      // a later refresh).
+      Promise.all([
+        api("/admin/users").then(function (users) {
+          users.forEach(function (u) { usersById[u.id] = u; });
+        }).catch(function () {}),
+        api("/admin/auctions").then(function (auctions) {
+          auctions.forEach(function (a) { auctionsById[a.id] = a; });
+        }).catch(function () {}),
+      ]).then(function () {
+        wireUsersTab();
+        wireSellersTab();
+        wireAuctionsTab();
+        wireBidsTab();
+        wireCategoriesTab();
+        wireSupportTab();
+      });
+    }).catch(showLoginPrompt);
+
+    function loadOverview() {
+      var el = document.getElementById("adm-stats");
+      api("/admin/stats").then(function (s) {
+        el.innerHTML = [
+          ["total_users", "Users"], ["total_auctions", "Auctions"], ["total_bids", "Bids"],
+          ["active_auctions", "Active"], ["completed_auctions", "Completed"], ["pending_auctions", "Pending review"],
+        ].map(function (pair) {
+          return '<div class="feature"><div><b>' + esc(s[pair[0]]) + "</b><span>" + pair[1] + "</span></div></div>";
+        }).join("") + '<div class="feature"><div><b>' + fmtEUR(s.total_credit_revenue) +
+          "</b><span>Credit revenue</span></div></div>";
+      }).catch(function () {
+        el.innerHTML = '<p class="tiny">Failed to load stats.</p>';
+      });
+    }
+
+    // Default filter status lives in the HTML (whichever chip has is-active) —
+    // each tab's own `var status = "..."` just has to match that markup.
+    function wireChipFilter(filterEl, onChange) {
+      filterEl.addEventListener("click", function (e) {
+        var chip = e.target.closest(".adm-chip");
+        if (!chip) return;
+        filterEl.querySelectorAll(".adm-chip").forEach(function (c) { c.classList.toggle("is-active", c === chip); });
+        onChange(chip.getAttribute("data-status"));
+      });
+    }
+
+    /* ------------------------------------------------------------- users -- */
+    function wireUsersTab() {
+      var listEl = document.getElementById("adm-users-list");
+      var searchEl = document.getElementById("adm-users-search");
+      var allUsers = [];
+
+      function userRow(u) {
+        // A staff-tier row (or granting a staff role) needs super_admin server-side anyway -
+        // a regular admin gets a read-only role cell instead of a select that would just 403.
+        var canEditRole = viewerRole === "super_admin" || !STAFF_ROLES[u.role];
+        var roleCell = canEditRole
+          ? '<select data-role-select="' + u.id + '" style="font:inherit">' +
+            ["buyer", "seller", "corporate_seller", "admin", "super_admin", "support"].map(function (r) {
+              return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + '>' + r + "</option>";
+            }).join("") + "</select> " +
+            '<button class="btn btn--outline btn--sm" type="button" data-save-role="' + u.id + '">Save</button>'
+          : escHtml(u.role);
+        return "<tr><td>" + escHtml(u.name) + "</td><td>" + escHtml(u.email) + "</td><td>" + roleCell + "</td><td>" +
+          escHtml(u.status) + "</td><td>" + escHtml(u.created_at ? new Date(u.created_at + "Z").toLocaleDateString() : "—") +
+          '</td><td style="white-space:nowrap">' +
+          '<button class="btn btn--outline btn--sm" type="button" data-set-status="' + u.id + '" data-value="active">Active</button> ' +
+          '<button class="btn btn--outline btn--sm" type="button" data-set-status="' + u.id + '" data-value="suspended">Suspend</button> ' +
+          '<button class="btn btn--ghostred btn--sm" type="button" data-set-status="' + u.id + '" data-value="banned">Ban</button></td></tr>';
+      }
+
+      function render() {
+        var q = searchEl.value.trim().toLowerCase();
+        var filtered = !q ? allUsers : allUsers.filter(function (u) {
+          return (u.name + " " + u.email).toLowerCase().indexOf(q) !== -1;
+        });
+        if (!filtered.length) { listEl.innerHTML = '<p class="tiny">No users found.</p>'; return; }
+        listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+          "<th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th>" +
+          "</tr></thead><tbody>" + filtered.map(userRow).join("") + "</tbody></table></div>";
+      }
+
+      function refresh() {
+        api("/admin/users").then(function (users) {
+          allUsers = users;
+          usersById = {};
+          users.forEach(function (u) { usersById[u.id] = u; });
+          render();
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load users.</p>';
+        });
+      }
+
+      searchEl.addEventListener("input", render);
+      listEl.addEventListener("click", function (e) {
+        var saveBtn = e.target.closest("[data-save-role]");
+        var statusBtn = e.target.closest("[data-set-status]");
+        if (saveBtn) {
+          var uid = saveBtn.getAttribute("data-save-role");
+          var sel = listEl.querySelector('[data-role-select="' + uid + '"]');
+          api("/admin/users/" + uid + "/role?new_role=" + encodeURIComponent(sel.value), { method: "PUT" })
+            .then(function () { banner("Role updated."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to update role.", "error"); });
+          return;
+        }
+        if (statusBtn) {
+          api("/admin/users/" + statusBtn.getAttribute("data-set-status") + "/status?new_status=" + statusBtn.getAttribute("data-value"), { method: "PUT" })
+            .then(function () { banner("Status updated."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to update status.", "error"); });
+        }
+      });
+
+      refresh();
+    }
+
+    /* ----------------------------------------------------------- sellers -- */
+    function wireSellersTab() {
+      var listEl = document.getElementById("adm-sellers-list");
+      var filterEl = document.getElementById("adm-sellers-filter");
+      var status = "pending";
+
+      function applicantLabel(userId) {
+        var u = usersById[userId];
+        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : userId;
+      }
+
+      function row(p) {
+        var actions = p.verification_status === "pending"
+          ? '<button class="btn btn--outline btn--sm" type="button" data-verify-seller="' + p.id + '">Verify</button> ' +
+            '<button class="btn btn--ghostred btn--sm" type="button" data-reject-seller="' + p.id + '">Reject</button>'
+          : (p.rejection_reason ? '<span class="tiny" style="color:#9f1239">' + escHtml(p.rejection_reason) + "</span>" : "");
+        return "<tr><td>" + applicantLabel(p.user_id) + "</td><td>" + escHtml(p.account_type) +
+          (p.company_name ? " — " + escHtml(p.company_name) : "") + "</td><td>" + escHtml(p.city || "—") + "</td><td>" +
+          escHtml(p.verification_status) + "</td><td>" + escHtml(new Date(p.created_at + "Z").toLocaleDateString()) +
+          '</td><td style="white-space:nowrap">' + actions + "</td></tr>";
+      }
+
+      function refresh() {
+        var qs = status ? "?verification_status=" + status : "";
+        api("/admin/sellers" + qs).then(function (apps) {
+          if (!apps.length) { listEl.innerHTML = '<p class="tiny">No seller applications.</p>'; return; }
+          listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+            "<th>Applicant</th><th>Type</th><th>City</th><th>Status</th><th>Applied</th><th>Actions</th>" +
+            "</tr></thead><tbody>" + apps.map(row).join("") + "</tbody></table></div>";
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load seller applications.</p>';
+        });
+      }
+
+      wireChipFilter(filterEl, function (s) { status = s; refresh(); });
+
+      listEl.addEventListener("click", function (e) {
+        var verifyBtn = e.target.closest("[data-verify-seller]");
+        var rejectBtn = e.target.closest("[data-reject-seller]");
+        if (verifyBtn) {
+          api("/admin/sellers/" + verifyBtn.getAttribute("data-verify-seller") + "/verify", { method: "POST" })
+            .then(function () { banner("Seller verified."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to verify seller.", "error"); });
+        } else if (rejectBtn) {
+          var reason = prompt("Reason for rejecting this application:");
+          if (!reason) return;
+          api("/admin/sellers/" + rejectBtn.getAttribute("data-reject-seller") + "/reject", { method: "POST", body: { reason: reason } })
+            .then(function () { banner("Seller application rejected."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to reject application.", "error"); });
+        }
+      });
+
+      refresh();
+    }
+
+    /* ---------------------------------------------------------- auctions -- */
+    function wireAuctionsTab() {
+      var listEl = document.getElementById("adm-auctions-list");
+      var filterEl = document.getElementById("adm-auctions-filter");
+      var status = "under_review";
+
+      function row(a) {
+        var actions = '<a class="btn btn--outline btn--sm" href="auction.html?id=' + encodeURIComponent(a.id) + '">View</a> ';
+        if (a.status === "under_review") {
+          actions += '<button class="btn btn--primary btn--sm" type="button" data-approve="' + a.id + '">Approve</button> ' +
+            '<button class="btn btn--outline btn--sm" type="button" data-request-changes="' + a.id + '">Request changes</button> ' +
+            '<button class="btn btn--ghostred btn--sm" type="button" data-reject="' + a.id + '">Reject</button> ';
+        }
+        actions += '<button class="btn btn--outline btn--sm" type="button" data-toggle-featured="' + a.id +
+          '" data-value="' + (!a.is_featured) + '">' + (a.is_featured ? "Unfeature" : "Feature") + "</button>";
+        return "<tr><td>" + escHtml(a.title) + (a.is_featured ? " ★" : "") +
+          (a.contact_flagged ? ' <span class="tiny" style="color:#9f1239">⚠ contact info?</span>' : "") + "</td><td>" +
+          fmtEUR(a.current_price) + "</td><td>" + escHtml(a.status) + "</td><td>" +
+          escHtml(new Date(a.created_at + "Z").toLocaleDateString()) + '</td><td style="white-space:nowrap">' + actions + "</td></tr>";
+      }
+
+      function refresh() {
+        var qs = status ? "?status=" + status : "";
+        api("/admin/auctions" + qs).then(function (auctions) {
+          if (!auctions.length) { listEl.innerHTML = '<p class="tiny">No auctions.</p>'; return; }
+          listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+            "<th>Title</th><th>Price</th><th>Status</th><th>Created</th><th>Actions</th>" +
+            "</tr></thead><tbody>" + auctions.map(row).join("") + "</tbody></table></div>";
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load auctions.</p>';
+        });
+      }
+
+      wireChipFilter(filterEl, function (s) { status = s; refresh(); });
+
+      listEl.addEventListener("click", function (e) {
+        var approveBtn = e.target.closest("[data-approve]");
+        var rejectBtn = e.target.closest("[data-reject]");
+        var changesBtn = e.target.closest("[data-request-changes]");
+        var featBtn = e.target.closest("[data-toggle-featured]");
+        if (approveBtn) {
+          api("/auctions/" + approveBtn.getAttribute("data-approve") + "/approve", { method: "POST" })
+            .then(function () { banner("Auction approved."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to approve.", "error"); });
+        } else if (rejectBtn) {
+          if (!confirm("Reject this auction?")) return;
+          api("/auctions/" + rejectBtn.getAttribute("data-reject") + "/reject", { method: "POST" })
+            .then(function () { banner("Auction rejected."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to reject.", "error"); });
+        } else if (changesBtn) {
+          var reason = prompt("What should the seller change?");
+          if (!reason) return;
+          api("/auctions/" + changesBtn.getAttribute("data-request-changes") + "/request-changes", { method: "POST", body: { reason: reason } })
+            .then(function () { banner("Changes requested."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to request changes.", "error"); });
+        } else if (featBtn) {
+          api("/admin/auctions/" + featBtn.getAttribute("data-toggle-featured") + "/featured?is_featured=" + featBtn.getAttribute("data-value"), { method: "PUT" })
+            .then(refresh)
+            .catch(function (err) { banner(err.message || "Failed to update featured status.", "error"); });
+        }
+      });
+
+      refresh();
+    }
+
+    /* ------------------------------------------------------------- bids -- */
+    function wireBidsTab() {
+      var listEl = document.getElementById("adm-bids-list");
+      var auctionFilterEl = document.getElementById("adm-bids-auction-filter");
+
+      function auctionLabel(auctionId) {
+        var a = auctionsById[auctionId];
+        return a ? escHtml(a.lot_code ? a.lot_code + " — " + a.title : a.title) : (auctionId || "—");
+      }
+
+      function userLabel(uid) {
+        var u = usersById[uid];
+        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : (uid || "—");
+      }
+
+      function row(b) {
+        var actions = b.invalidated
+          ? '<span class="tiny">Invalidated</span>'
+          : '<button class="btn btn--ghostred btn--sm" type="button" data-invalidate-bid="' + b.id + '">Invalidate</button>';
+        return "<tr><td>" + auctionLabel(b.auction_id) + "</td><td>" + userLabel(b.user_id) + "</td><td>" +
+          fmtEUR(b.amount) + "</td><td>" + escHtml(new Date(b.created_at + "Z").toLocaleString()) +
+          "</td><td>" + actions + "</td></tr>";
+      }
+
+      auctionFilterEl.innerHTML = '<option value="">All auctions</option>' +
+        Object.keys(auctionsById).map(function (id) {
+          return '<option value="' + id + '">' + auctionLabel(id) + "</option>";
+        }).join("");
+
+      function refresh() {
+        var auctionId = auctionFilterEl.value;
+        var qs = auctionId ? "?auction_id=" + encodeURIComponent(auctionId) : "";
+        api("/admin/bids" + qs).then(function (bids) {
+          if (!bids.length) { listEl.innerHTML = '<p class="tiny">No bids.</p>'; return; }
+          listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+            "<th>Auction</th><th>Bidder</th><th>Amount</th><th>Placed</th><th>Actions</th>" +
+            "</tr></thead><tbody>" + bids.map(row).join("") + "</tbody></table></div>";
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load bids.</p>';
+        });
+      }
+
+      auctionFilterEl.addEventListener("change", refresh);
+
+      listEl.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-invalidate-bid]");
+        if (!btn) return;
+        var reason = prompt("Reason for invalidating this bid:");
+        if (!reason) return;
+        api("/admin/bids/" + btn.getAttribute("data-invalidate-bid") + "/invalidate", { method: "POST", body: { reason: reason } })
+          .then(function () { banner("Bid invalidated."); refresh(); })
+          .catch(function (err) { banner(err.message || "Failed to invalidate bid.", "error"); });
+      });
+
+      refresh();
+    }
+
+    /* -------------------------------------------------------- categories -- */
+    function wireCategoriesTab() {
+      var listEl = document.getElementById("adm-categories-list");
+      var parentSelect = document.getElementById("adm-cat-parent");
+      var form = document.getElementById("adm-category-form");
+      var allCats = [];
+
+      function row(c) {
+        return "<tr><td>" + escHtml(c.name) + "</td><td>" + escHtml(c.slug) + "</td><td>" + escHtml(c.status) +
+          '</td><td style="white-space:nowrap">' +
+          '<button class="btn btn--outline btn--sm" type="button" data-edit-cat="' + c.id + '">Rename</button> ' +
+          '<button class="btn btn--outline btn--sm" type="button" data-toggle-cat="' + c.id + '" data-value="' +
+          (c.status === "active" ? "inactive" : "active") + '">' + (c.status === "active" ? "Deactivate" : "Activate") + "</button> " +
+          '<button class="btn btn--ghostred btn--sm" type="button" data-delete-cat="' + c.id + '">Delete</button></td></tr>';
+      }
+
+      function refresh() {
+        api("/admin/categories").then(function (cats) {
+          allCats = cats;
+          parentSelect.innerHTML = '<option value="">— None —</option>' +
+            cats.map(function (c) { return '<option value="' + c.id + '">' + escHtml(c.name) + "</option>"; }).join("");
+          if (!cats.length) { listEl.innerHTML = '<p class="tiny">No categories yet.</p>'; return; }
+          listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+            "<th>Name</th><th>Slug</th><th>Status</th><th>Actions</th>" +
+            "</tr></thead><tbody>" + cats.map(row).join("") + "</tbody></table></div>";
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load categories.</p>';
+        });
+      }
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var body = {
+          name: document.getElementById("adm-cat-name").value.trim(),
+          slug: document.getElementById("adm-cat-slug").value.trim(),
+          parent_id: parentSelect.value ? parseInt(parentSelect.value, 10) : null,
+        };
+        api("/admin/categories", { method: "POST", body: body })
+          .then(function () { banner("Category added."); form.reset(); refresh(); })
+          .catch(function (err) { banner(err.message || "Failed to add category.", "error"); });
+      });
+
+      listEl.addEventListener("click", function (e) {
+        var editBtn = e.target.closest("[data-edit-cat]");
+        var toggleBtn = e.target.closest("[data-toggle-cat]");
+        var delBtn = e.target.closest("[data-delete-cat]");
+        if (editBtn) {
+          var id = editBtn.getAttribute("data-edit-cat");
+          var cat = allCats.filter(function (c) { return String(c.id) === id; })[0];
+          var newName = prompt("New name:", cat ? cat.name : "");
+          if (!newName) return;
+          api("/admin/categories/" + id, { method: "PUT", body: { name: newName } })
+            .then(function () { banner("Category updated."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to update category.", "error"); });
+        } else if (toggleBtn) {
+          api("/admin/categories/" + toggleBtn.getAttribute("data-toggle-cat"), { method: "PUT", body: { status: toggleBtn.getAttribute("data-value") } })
+            .then(refresh)
+            .catch(function (err) { banner(err.message || "Failed to update category.", "error"); });
+        } else if (delBtn) {
+          if (!confirm("Delete this category? This cannot be undone.")) return;
+          api("/admin/categories/" + delBtn.getAttribute("data-delete-cat"), { method: "DELETE" })
+            .then(function () { banner("Category deleted."); refresh(); })
+            .catch(function (err) { banner(err.message || "Failed to delete category — it may still be in use.", "error"); });
+        }
+      });
+
+      refresh();
+    }
+
+    /* ----------------------------------------------------------- support -- */
+    function wireSupportTab() {
+      var listEl = document.getElementById("adm-support-list");
+      var filterEl = document.getElementById("adm-support-filter");
+      var status = "open";
+
+      function userLabel(uid) {
+        var u = usersById[uid];
+        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : (uid || "—");
+      }
+
+      function row(t) {
+        var statusOpts = ["open", "in_progress", "resolved", "closed"].map(function (s) {
+          return '<option value="' + s + '"' + (s === t.status ? " selected" : "") + ">" + s + "</option>";
+        }).join("");
+        var preview = t.message.length > 140 ? escHtml(t.message.slice(0, 140)) + "…" : escHtml(t.message);
+        return "<tr><td><b>" + escHtml(t.subject) + '</b><br><span class="tiny">' + preview + "</span>" +
+          (t.lot_code ? '<br><span class="tiny">Lot: ' + escHtml(t.lot_code) + "</span>" : "") + "</td><td>" +
+          escHtml(t.category) + "</td><td>" + userLabel(t.user_id) + "</td><td>" +
+          escHtml(new Date(t.created_at + "Z").toLocaleDateString()) + "</td><td>" +
+          '<select data-ticket-status="' + t.id + '" style="font:inherit">' + statusOpts + "</select> " +
+          '<button class="btn btn--outline btn--sm" type="button" data-save-ticket="' + t.id + '">Save</button></td></tr>';
+      }
+
+      function refresh() {
+        var qs = status ? "?status=" + status : "";
+        api("/admin/support-tickets" + qs).then(function (tickets) {
+          if (!tickets.length) { listEl.innerHTML = '<p class="tiny">No tickets.</p>'; return; }
+          listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
+            "<th>Message</th><th>Category</th><th>User</th><th>Created</th><th>Status</th>" +
+            "</tr></thead><tbody>" + tickets.map(row).join("") + "</tbody></table></div>";
+        }).catch(function () {
+          listEl.innerHTML = '<p class="tiny">Failed to load support tickets.</p>';
+        });
+      }
+
+      wireChipFilter(filterEl, function (s) { status = s; refresh(); });
+
+      listEl.addEventListener("click", function (e) {
+        var saveBtn = e.target.closest("[data-save-ticket]");
+        if (!saveBtn) return;
+        var id = saveBtn.getAttribute("data-save-ticket");
+        var sel = listEl.querySelector('[data-ticket-status="' + id + '"]');
+        api("/admin/support-tickets/" + id + "?new_status=" + sel.value, { method: "PUT" })
+          .then(function () { banner("Ticket updated."); refresh(); })
+          .catch(function (err) { banner(err.message || "Failed to update ticket.", "error"); });
+      });
+
+      refresh();
+    }
+  }
+
   /* --------------------------------------------------------------- init -- */
   paintHeader();
   handleHashActions();
@@ -908,6 +1589,7 @@
   wireNotificationBell();
   wireWallet();
   wireSupportForm();
+  wireAdminPage();
   if (document.querySelector(".plans .plan")) {
     fetch(API_BASE + "/credits/packages").then(function (res) { return res.json(); })
       .then(wirePlans)

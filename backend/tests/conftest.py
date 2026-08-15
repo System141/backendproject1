@@ -176,6 +176,30 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
+async def super_admin_user(db_session: AsyncSession) -> User:
+    """Create and return a persisted super_admin user fixture (distinct from
+    admin_user) - staff-role-change endpoints gate on super_admin specifically,
+    a regular admin isn't enough to exercise that path."""
+    uid = str(uuid.uuid4())
+    user = User(
+        id=uid,
+        name="Super Admin User",
+        email=f"superadmin_{uuid.uuid4().hex[:8]}@example.com",
+        password_hash=hash_password("SuperAdminPass123!"),
+        role=UserRole.super_admin,
+        status="active",
+        accepted_terms=True,
+        accepted_privacy=True,
+        marketing_consent=False,
+        email_verified=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
 async def test_category(db_session: AsyncSession) -> Category:
     """Create and return a persisted category fixture."""
     category = Category(
@@ -206,4 +230,11 @@ async def seller_headers(seller_user: User) -> dict:
 async def admin_headers(admin_user: User) -> dict:
     """Return Authorization headers for an admin user."""
     token = create_access_token(data={"sub": admin_user.id, "role": admin_user.role.value})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def super_admin_headers(super_admin_user: User) -> dict:
+    """Return Authorization headers for a super_admin user."""
+    token = create_access_token(data={"sub": super_admin_user.id, "role": super_admin_user.role.value})
     return {"Authorization": f"Bearer {token}"}

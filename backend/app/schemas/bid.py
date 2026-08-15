@@ -20,6 +20,7 @@ class BidResponse(BaseModel):
     auction_status: str | None = None
     auction_end_time: datetime | None = None
     auction_lot_code: str | None = None
+    invalidated: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -97,12 +97,21 @@
   }
 
   /* -------------------------------------------------------------- header -- */
+  var STAFF_ROLES = { admin: 1, super_admin: 1, support: 1 }; // mirrors wireAdminPage's own copy - keeps this header helper standalone
   function paintHeader() {
     if (!token()) return;
     var user = null;
     try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (e) {}
+    var isStaff = !!(user && STAFF_ROLES[user.role]);
     document.querySelectorAll(".hdr__actions, .drawer__foot").forEach(function (box) {
       box.innerHTML = "";
+      if (isStaff) {
+        var admin = document.createElement("a");
+        admin.href = "admin.html";
+        admin.className = "btn btn--outline btn--sm";
+        admin.textContent = "Admin";
+        box.appendChild(admin);
+      }
       var pill = document.createElement("a");
       pill.href = "account.html";
       pill.className = "btn btn--outline btn--sm";

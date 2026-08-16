@@ -1124,9 +1124,16 @@ account_body = f'''
 # empty and every fetch path has a real error state.
 ADMIN_TABS = [("overview", "Overview"), ("users", "Users"), ("sellers", "Sellers"),
               ("auctions", "Auctions"), ("bids", "Bids"), ("categories", "Categories"), ("support", "Support")]
+# Tabs whose default filter is a "needs attention" queue get a live count
+# badge (updated by wireXTab's refresh() in api.js) so staff can see what's
+# waiting without opening each pane - skipped for overview/users/bids since
+# those have no such queue.
+ADMIN_TAB_COUNTS = {"sellers", "auctions", "support"}
 admin_tabs_nav = "".join(
     f'<button class="tab" id="tab-adm-{k}" role="tab" aria-selected="{"true" if n == 0 else "false"}" '
-    f'aria-controls="pane-adm-{k}" type="button"{"" if n == 0 else " tabindex=\"-1\""}>{t}</button>'
+    f'aria-controls="pane-adm-{k}" type="button"{"" if n == 0 else " tabindex=\"-1\""}>{t}'
+    + (f'<span class="tab-count is-hidden" id="tab-adm-{k}-count" aria-hidden="true"></span>' if k in ADMIN_TAB_COUNTS else "")
+    + "</button>"
     for n, (k, t) in enumerate(ADMIN_TABS))
 
 admin_body = f'''

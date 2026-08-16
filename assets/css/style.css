@@ -743,6 +743,10 @@ body.has-tabbar { padding-bottom: 62px; }
 .tab[aria-selected="true"] { color: var(--red); border-bottom-color: var(--red); }
 .tabs--scroll { display: flex; overflow-x: auto; }
 .tabs--scroll .tab { flex: none; padding-inline: 14px; white-space: nowrap; }
+.tab-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px;
+  margin-left: 6px; background: var(--red); color: #fff; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 1;
+}
 
 /* ---------- Notifications ---------- */
 .notif-wrap { position: relative; margin-left: 14px; }

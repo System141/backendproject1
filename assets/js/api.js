@@ -1209,6 +1209,15 @@
       });
     }
 
+    // Live "needs attention" count badge next to a tab label - see
+    // ADMIN_TAB_COUNTS in build.py for which tabs have one.
+    function setTabCount(key, n) {
+      var badge = document.getElementById("tab-adm-" + key + "-count");
+      if (!badge) return;
+      badge.textContent = n;
+      badge.classList.toggle("is-hidden", !n);
+    }
+
     // Default filter status lives in the HTML (whichever chip has is-active) —
     // each tab's own `var status = "..."` just has to match that markup.
     function wireChipFilter(filterEl, onChange) {
@@ -1314,6 +1323,7 @@
       function refresh() {
         var qs = status ? "?verification_status=" + status : "";
         api("/admin/sellers" + qs).then(function (apps) {
+          setTabCount("sellers", apps.length);
           if (!apps.length) { listEl.innerHTML = '<p class="tiny">No seller applications.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Applicant</th><th>Type</th><th>City</th><th>Status</th><th>Applied</th><th>Actions</th>" +
@@ -1368,6 +1378,7 @@
       function refresh() {
         var qs = status ? "?status=" + status : "";
         api("/admin/auctions" + qs).then(function (auctions) {
+          setTabCount("auctions", auctions.length);
           if (!auctions.length) { listEl.innerHTML = '<p class="tiny">No auctions.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Title</th><th>Price</th><th>Status</th><th>Created</th><th>Actions</th>" +
@@ -1562,6 +1573,7 @@
       function refresh() {
         var qs = status ? "?status=" + status : "";
         api("/admin/support-tickets" + qs).then(function (tickets) {
+          setTabCount("support", tickets.length);
           if (!tickets.length) { listEl.innerHTML = '<p class="tiny">No tickets.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Message</th><th>Category</th><th>User</th><th>Created</th><th>Status</th>" +

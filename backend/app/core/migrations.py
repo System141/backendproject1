@@ -94,6 +94,7 @@ MISSING_COLUMNS = {
 # ADD COLUMN IF NOT EXISTS above. No-op on SQLite (no such type), caught below.
 MISSING_ENUM_VALUES = {
     "auctionstatus": ["draft", "under_review", "upcoming", "live", "extended", "ended", "cancelled"],
+    "userrole": ["buyer", "seller", "corporate_seller", "admin", "super_admin", "support"],
 }
 
 # ADD COLUMN can't declare UNIQUE inline on an already-existing table (Postgres

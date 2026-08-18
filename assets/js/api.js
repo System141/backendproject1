@@ -868,7 +868,8 @@
         document.getElementById("acct-city").value = user.city || "";
         document.getElementById("acct-address").value = user.address || "";
 
-        var isSeller = user.role === "seller" || user.role === "corporate_seller";
+        var isSeller = user.role === "seller" || user.role === "corporate_seller" ||
+          user.role === "admin" || user.role === "super_admin";
         var listingsTab = document.getElementById("tab-listings");
         if (listingsTab) listingsTab.classList.toggle("is-hidden", !isSeller);
         var applyWrap = document.getElementById("acct-seller-apply-wrap");

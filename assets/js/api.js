@@ -104,6 +104,10 @@
   /* -------------------------------------------------------------- header -- */
   var STAFF_ROLES = { admin: 1, super_admin: 1, support: 1 }; // mirrors wireAdminPage's own copy - keeps this header helper standalone
   function paintHeader() {
+    // Static "Sign up now" promo (auctions.html) - not login-state-aware in
+    // the markup itself, hide it once we know the visitor is already in.
+    var guestPromo = document.getElementById("guest-promo");
+    if (guestPromo && token()) guestPromo.classList.add("is-hidden");
     if (!token()) return;
     var user = null;
     try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (e) {}

@@ -710,7 +710,7 @@ auctions_body = f'''
 </div>
 </section>
 
-<section class="section--tight wrap">
+<section class="section--tight wrap" id="guest-promo">
 <div class="promo">
 <div>
 <h2 class="h3" style="margin-bottom:6px">Access more. Bid with confidence.</h2>

@@ -175,9 +175,15 @@ def require_role(*roles: UserRole):
 
 
 async def get_current_seller(
-    current_user: User = Depends(require_role(UserRole.seller, UserRole.corporate_seller)),
+    current_user: User = Depends(require_role(
+        UserRole.seller, UserRole.corporate_seller, UserRole.admin, UserRole.super_admin,
+    )),
 ) -> User:
-    """Dependency: current user must be a seller or corporate_seller."""
+    """Dependency: current user must be a seller, corporate_seller, or staff
+    (admin/super_admin) - admins can list/manage auctions directly rather
+    than going through seller application (which would overwrite their role,
+    see admin.py's verify_seller_application), matching doc §17.1's "has
+    everything" for admin/super_admin."""
     return current_user
 
 

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -64,9 +66,9 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     """Doc §10.1 'Security' dashboard tab: self-service password change."""
-    if not verify_password(req.current_password, current_user.password_hash):
+    if not await asyncio.to_thread(verify_password, req.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    current_user.password_hash = hash_password(req.new_password)
+    current_user.password_hash = await asyncio.to_thread(hash_password, req.new_password)
     await db.commit()
     return {"status": "ok"}
 

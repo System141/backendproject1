@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
@@ -27,6 +28,11 @@ UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"
 )
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _write_file(filepath: str, content: bytes) -> None:
+    with open(filepath, "wb") as f:
+        f.write(content)
 
 # Doc §6.2: private documents must never be reachable by a guessed/reused
 # direct URL, so they live outside the publicly-mounted UPLOAD_DIR entirely -
@@ -96,9 +102,9 @@ async def upload_image(
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
-    # Save to disk
-    with open(filepath, "wb") as f:
-        f.write(content)
+    # Save to disk (off the event loop - sync file I/O would otherwise
+    # stall every other request on this single-process app, CLAUDE.md)
+    await asyncio.to_thread(_write_file, filepath, content)
 
     image_url = f"/uploads/{filename}"
 
@@ -156,9 +162,8 @@ async def upload_images_batch(
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
 
-        # Save to disk
-        with open(filepath, "wb") as f:
-            f.write(content)
+        # Save to disk (off the event loop, see single-upload endpoint above)
+        await asyncio.to_thread(_write_file, filepath, content)
 
         image_url = f"/uploads/{filename}"
 
@@ -227,8 +232,7 @@ async def upload_documents_batch(
     for sort_idx, (content, ext) in enumerate(contents):
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(PRIVATE_UPLOAD_DIR, filename)
-        with open(filepath, "wb") as f:
-            f.write(content)
+        await asyncio.to_thread(_write_file, filepath, content)
 
         img_record = AuctionImage(
             id=str(uuid.uuid4()),

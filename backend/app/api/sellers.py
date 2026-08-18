@@ -1,6 +1,7 @@
 """Seller application API (doc §11.1/§11.2): Apply -> Admin Review -> Verified Seller.
 Verification itself (and the role promotion it triggers) is an admin-only
 action - see app/api/admin.py's SELLER APPLICATIONS section."""
+import asyncio
 import os
 import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -13,7 +14,7 @@ from app.core.security import get_current_user
 from app.models.domain import SellerProfile, SellerVerificationStatus, User
 from app.schemas.seller import SellerApplicationRequest, SellerProfileResponse
 from app.services.notifications import send_notification, NotificationType
-from app.api.uploads import ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE, PRIVATE_UPLOAD_DIR
+from app.api.uploads import ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE, PRIVATE_UPLOAD_DIR, _write_file
 
 sellers_router = APIRouter(prefix="/api/sellers", tags=["sellers"])
 
@@ -126,8 +127,7 @@ async def upload_verification_document(
         raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
 
     filename = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(PRIVATE_UPLOAD_DIR, filename), "wb") as f:
-        f.write(content)
+    await asyncio.to_thread(_write_file, os.path.join(PRIVATE_UPLOAD_DIR, filename), content)
 
     profile.verification_document = filename
     await db.commit()

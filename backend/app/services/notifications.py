@@ -5,6 +5,7 @@ Design (ponytail: minimal path):
 - Email sending is async via stdlib smtplib (no extra dep).
 - Email config via env vars; if not configured, email is silently skipped.
 """
+import asyncio
 import os
 import smtplib
 import uuid
@@ -162,7 +163,17 @@ async def send_notification(
         user = result.scalars().first()
         if user and user.email:
             use_me = user.preferred_language == "me" and title_me and message_me
-            _send_email(user.email, title_me if use_me else title, message_me if use_me else message)
+            # ponytail: smtplib.SMTP is blocking sync I/O; this app runs as a
+            # single asyncio process (CLAUDE.md: scheduler + WS broadcast are
+            # in-process tasks), so calling it inline here stalls every other
+            # request - including unrelated static page loads - for the SMTP
+            # round trip. to_thread offloads it without a new dependency.
+            # Root-cause fix: send_notification() is the only caller of
+            # _send_email() left on the hot request/scheduler path (auth.py's
+            # verification email already goes through to_thread too).
+            await asyncio.to_thread(
+                _send_email, user.email, title_me if use_me else title, message_me if use_me else message
+            )
 
     return notif
 

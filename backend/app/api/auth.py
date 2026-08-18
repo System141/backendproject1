@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import hashlib
@@ -69,7 +70,11 @@ async def _issue_verification_email(db: AsyncSession, user: User) -> str:
         if use_me else
         f"Click the link to verify your BidMont account: {verify_link}\n\nThis link expires in {EMAIL_VERIFICATION_TTL_HOURS}h."
     )
-    _send_email(user.email, subject, body)
+    # ponytail: smtplib is sync/blocking; this app is one asyncio process
+    # (CLAUDE.md), so a blocking SMTP call here stalls every other request
+    # (including plain static file serves) for the duration. to_thread moves
+    # it off the event loop.
+    await asyncio.to_thread(_send_email, user.email, subject, body)
     return token
 
 
@@ -114,7 +119,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
         name=req.name,
         email=req.email,
         phone=req.phone,
-        password_hash=hash_password(req.password),
+        password_hash=await asyncio.to_thread(hash_password, req.password),
         role=role,
         status="active",
         accepted_terms=req.accepted_terms,
@@ -150,7 +155,7 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalars().first()
 
-    if not user or not verify_password(req.password, user.password_hash):
+    if not user or not await asyncio.to_thread(verify_password, req.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -235,7 +240,7 @@ async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncS
         )
 
     # Update password
-    user.password_hash = hash_password(req.new_password)
+    user.password_hash = await asyncio.to_thread(hash_password, req.new_password)
     user.reset_token_hash = None
     user.reset_token_expires_at = None
     await db.commit()

@@ -103,6 +103,8 @@
 
   /* -------------------------------------------------------------- header -- */
   var STAFF_ROLES = { admin: 1, super_admin: 1, support: 1 }; // mirrors wireAdminPage's own copy - keeps this header helper standalone
+  // who can list auctions (matches backend's get_current_seller: seller, corporate_seller, admin, super_admin)
+  var SELLER_ROLES = { seller: 1, corporate_seller: 1, admin: 1, super_admin: 1 };
   function paintHeader() {
     // Static "Sign up now" promo (auctions.html) - not login-state-aware in
     // the markup itself, hide it once we know the visitor is already in.
@@ -112,6 +114,10 @@
     var user = null;
     try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (e) {}
     var isStaff = !!(user && STAFF_ROLES[user.role]);
+    var isSeller = !!(user && SELLER_ROLES[user.role]);
+    document.querySelectorAll("[data-sell-cta]").forEach(function (el) {
+      el.classList.toggle("is-hidden", !isSeller);
+    });
     document.querySelectorAll(".hdr__actions, .drawer__foot").forEach(function (box) {
       box.innerHTML = "";
       if (isStaff) {
@@ -120,6 +126,13 @@
         admin.className = "btn btn--outline btn--sm";
         admin.textContent = "Admin";
         box.appendChild(admin);
+      }
+      if (isSeller) {
+        var sell = document.createElement("a");
+        sell.href = "account.html#listings";
+        sell.className = "btn btn--outline btn--sm";
+        sell.textContent = "Sell";
+        box.appendChild(sell);
       }
       var pill = document.createElement("a");
       pill.href = "account.html";
@@ -868,16 +881,21 @@
         document.getElementById("acct-city").value = user.city || "";
         document.getElementById("acct-address").value = user.address || "";
 
-        var isSeller = user.role === "seller" || user.role === "corporate_seller" ||
-          user.role === "admin" || user.role === "super_admin";
+        var isSeller = !!SELLER_ROLES[user.role];
         var listingsTab = document.getElementById("tab-listings");
         if (listingsTab) listingsTab.classList.toggle("is-hidden", !isSeller);
         var applyWrap = document.getElementById("acct-seller-apply-wrap");
         if (applyWrap) applyWrap.classList.toggle("is-hidden", isSeller);
+        var manageWrap = document.getElementById("acct-seller-manage-wrap");
+        if (manageWrap) manageWrap.classList.toggle("is-hidden", !isSeller);
         if (!user.email_verified) {
           setText("acct-seller-apply-note", "Verify your email (check your inbox) before applying to sell.");
         }
         if (isSeller) loadSellerListings(categoriesById);
+        if (isSeller && location.hash === "#listings") {
+          var listingsBtn = document.getElementById("tab-listings");
+          if (listingsBtn) listingsBtn.click();
+        }
       }).catch(function () {});
 
       api("/credits/balance").then(function (d) {

@@ -696,6 +696,7 @@ auctions_body = f'''
 <div class="results-head">
 <p class="count">1,248 results found</p>
 <div style="display:flex;gap:8px;align-items:center">
+<a class="btn btn--primary btn--sm is-hidden" href="account.html#listings" data-sell-cta>List an auction</a>
 <label class="select"><span class="sr-only">Sort by</span>
 <select id="sort-select"><option>Ending soonest</option><option>Newly listed</option><option>Price: low to high</option><option>Price: high to low</option><option>Fewest credits</option></select></label>
 </div>
@@ -1077,6 +1078,11 @@ account_body = f'''
 <div class="field"><label for="acct-pw-new">New password</label><div class="field__wrap">{i("lock", 17)}<input id="acct-pw-new" type="password" autocomplete="new-password" minlength="6"></div></div>
 <button class="btn btn--primary" type="submit">Update password</button>
 </form>
+</div>
+<div class="panel is-hidden" id="acct-seller-manage-wrap" style="margin-top:14px">
+<h2 class="h3" style="margin-bottom:6px">Selling on BidMont</h2>
+<p class="tiny" style="margin-bottom:12px">Manage your listings or add a new auction.</p>
+<button class="btn btn--primary" type="button" data-goto-tab="listings">Manage listings</button>
 </div>
 <div class="panel" id="acct-seller-apply-wrap" style="margin-top:14px">
 <h2 class="h3" style="margin-bottom:6px">Sell on BidMont</h2>

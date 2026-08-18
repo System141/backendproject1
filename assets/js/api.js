@@ -1123,6 +1123,12 @@
       var listingForm = document.getElementById("acct-listing-form");
       if (listingForm) listingForm.addEventListener("submit", function (e) {
         e.preventDefault();
+        // form has novalidate (submit is handled entirely in JS below), so the
+        // required/min/minlength constraints already on the inputs (build.py)
+        // are otherwise silently skipped — enforce them here or an incomplete
+        // form (blank price, blank end date, ...) reaches the API as
+        // NaN/invalid JSON and comes back as an opaque 422.
+        if (!listingForm.reportValidity()) return;
         var id = document.getElementById("lst-id").value;
         if (!id && !document.getElementById("lst-declaration").checked) {
           banner("Confirm the seller declaration to publish.", "error");

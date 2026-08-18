@@ -53,6 +53,26 @@ class TestCreateAuction:
         assert data["defect_mechanical"] is None
         assert data["defect_missing_parts"] is None
 
+    async def test_admin_creates_auction_without_a_seller_profile(
+        self, async_client: AsyncClient, db_session: AsyncSession, admin_user: User, admin_headers: dict, test_category: Category
+    ):
+        """get_current_seller lets admin/super_admin through (6d70a4b), but staff
+        never hold a SellerProfile - the verified-SellerProfile check must not
+        re-block them behind it."""
+        admin_user.credits_balance = 1000.0  # cover the listing fee, unrelated to the SellerProfile gate under test
+        await db_session.commit()
+        payload = {
+            "title": "Staff-listed Auction",
+            "description": "Listed directly by an admin",
+            "category_id": test_category.id,
+            "start_price": 1000.0,
+            "min_increment": 50.0,
+            "end_time": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "declaration_accepted": True,
+        }
+        response = await async_client.post("/api/auctions", json=payload, headers=admin_headers)
+        assert response.status_code == 201
+
     async def test_seller_creates_equipment_auction_with_new_fields(
         self, async_client: AsyncClient, seller_headers: dict, test_category: Category
     ):

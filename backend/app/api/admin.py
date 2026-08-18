@@ -281,6 +281,25 @@ async def admin_update_user_role(
 
     old_role = user.role.value if hasattr(user.role, "value") else str(user.role)
     user.role = role_enum
+
+    # This is a blunt, generic role change (unlike sellers.py's apply ->
+    # admin_verify_seller flow), but an admin hand-promoting someone to
+    # seller/corporate_seller here IS their approval - without a verified
+    # SellerProfile, create_auction (app/api/auctions.py) would still 403
+    # them with "Apply as a seller..." despite the role change looking like
+    # it granted selling rights.
+    if role_enum in (UserRole.seller, UserRole.corporate_seller):
+        profile_result = await db.execute(select(SellerProfile).where(SellerProfile.user_id == user.id))
+        profile = profile_result.scalars().first()
+        if profile:
+            profile.verification_status = SellerVerificationStatus.verified
+            profile.rejection_reason = None
+        else:
+            db.add(SellerProfile(
+                id=str(uuid.uuid4()), user_id=user.id, account_type="individual",
+                verification_status=SellerVerificationStatus.verified,
+            ))
+
     await db.commit()
     await db.refresh(user)
 

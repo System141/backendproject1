@@ -69,10 +69,13 @@ async def create_auction(
     if not req.declaration_accepted:
         raise HTTPException(status_code=400, detail="You must confirm the seller declaration to submit a listing")
 
-    profile_result = await db.execute(select(SellerProfile).where(SellerProfile.user_id == current_user.id))
-    profile = profile_result.scalars().first()
-    if not profile or profile.verification_status != SellerVerificationStatus.verified:
-        raise HTTPException(status_code=403, detail="Apply as a seller and get verified before creating listings")
+    # Staff (admin/super_admin) sell directly per get_current_seller's own
+    # grant above - they were never meant to hold a SellerProfile.
+    if current_user.role not in (UserRole.admin, UserRole.super_admin):
+        profile_result = await db.execute(select(SellerProfile).where(SellerProfile.user_id == current_user.id))
+        profile = profile_result.scalars().first()
+        if not profile or profile.verification_status != SellerVerificationStatus.verified:
+            raise HTTPException(status_code=403, detail="Apply as a seller and get verified before creating listings")
 
     # Validate category exists
     cat_result = await db.execute(select(Category).where(Category.id == req.category_id))

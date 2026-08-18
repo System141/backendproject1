@@ -20,6 +20,25 @@ async def test_admin_promotes_buyer_to_seller(async_client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
+async def test_admin_promoting_to_seller_grants_a_verified_profile(
+    async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_headers: dict
+):
+    """Promoting via this blunt role editor (not the apply -> admin_verify_seller
+    flow) must still leave the user able to create listings - see
+    create_auction's SellerProfile.verified check in app/api/auctions.py."""
+    from sqlalchemy import select
+    from app.models.domain import SellerProfile, SellerVerificationStatus
+
+    resp = await async_client.put(f"/api/admin/users/{test_user.id}/role?new_role=seller", headers=admin_headers)
+    assert resp.status_code == 200
+
+    result = await db_session.execute(select(SellerProfile).where(SellerProfile.user_id == test_user.id))
+    profile = result.scalars().first()
+    assert profile is not None
+    assert profile.verification_status == SellerVerificationStatus.verified
+
+
+@pytest.mark.asyncio
 async def test_regular_admin_cannot_grant_admin_role(async_client: AsyncClient, db_session: AsyncSession, test_user: User, admin_headers: dict):
     """A regular admin trying to mint a new admin must be rejected (403), not silently allowed."""
     resp = await async_client.put(f"/api/admin/users/{test_user.id}/role?new_role=admin", headers=admin_headers)

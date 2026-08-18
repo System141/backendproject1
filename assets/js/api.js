@@ -257,7 +257,10 @@
   function renderAuctionGrid(containerSel, auctions, categoriesById, emptyMessage) {
     var container = document.querySelector(containerSel);
     if (!container) return;
-    var template = container.querySelector(".auction");
+    // Cache the card template on first use — an empty result wipes the
+    // container's markup, so re-querying it on the next render would find
+    // nothing and the grid would never be able to render again.
+    var template = container.__cardTemplate || (container.__cardTemplate = container.querySelector(".auction"));
     if (!template) return;
     template = template.cloneNode(true);
     container.innerHTML = "";
@@ -303,6 +306,14 @@
     });
   }
 
+  var SORT_OPTIONS = {
+    "ending soonest": { sort_by: "end_time", sort_dir: "asc" },
+    "newly listed": { sort_by: "created_at", sort_dir: "desc" },
+    "price: low to high": { sort_by: "current_price", sort_dir: "asc" },
+    "price: high to low": { sort_by: "current_price", sort_dir: "desc" },
+    "fewest credits": { sort_by: "participation_credit_cost", sort_dir: "asc" },
+  };
+
   function wireAuctionListings() {
     var rail = document.querySelector(".rail");
     var grid = document.querySelector(".grid-auctions");
@@ -313,35 +324,160 @@
           .then(function (r) { renderAuctionGrid(".rail", r.items, categoriesById); })
           .catch(function () {});
       }
-      if (grid) {
-        var activeCategoryId = null;
-        function refreshGrid() {
-          var params = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
-          if (activeCategoryId) params.category_id = activeCategoryId;
-          fetchAuctions(params)
-            .then(function (r) {
-              renderAuctionGrid(".grid-auctions", r.items, categoriesById);
-              var countEl = document.querySelector(".count");
-              if (countEl) countEl.textContent = r.total + " results found";
-            })
-            .catch(function () {});
-        }
-        var chipsWrap = document.querySelector("#categories.chips");
-        if (chipsWrap) {
-          var idByName = {};
-          Object.keys(categoriesById).forEach(function (id) {
-            idByName[categoriesById[id].name.toLowerCase()] = categoriesById[id].id;
-          });
-          chipsWrap.querySelectorAll(".chip").forEach(function (chip) {
-            chip.addEventListener("click", function () {
-              var label = chip.textContent.trim().toLowerCase();
-              activeCategoryId = label === "all categories" ? null : (idByName[label] || null);
-              refreshGrid();
-            });
-          });
-        }
+      if (!grid) return;
+
+      var idByName = {};
+      Object.keys(categoriesById).forEach(function (id) {
+        idByName[categoriesById[id].name.toLowerCase()] = categoriesById[id].id;
+      });
+
+      // Single source of truth for every control on the page (chips, searchbar,
+      // sort select, and the desktop/mobile filter panels share this).
+      var state = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
+
+      function paramsFromState() {
+        var p = {};
+        Object.keys(state).forEach(function (k) { if (state[k] !== null && state[k] !== "") p[k] = state[k]; });
+        return p;
+      }
+
+      function refreshGrid() {
+        fetchAuctions(paramsFromState())
+          .then(function (r) {
+            renderAuctionGrid(".grid-auctions", r.items, categoriesById);
+            var countEl = document.querySelector(".count");
+            if (countEl) countEl.textContent = r.total + " results found";
+            var loadMoreBtn = document.querySelector("[data-load-more]");
+            if (loadMoreBtn) loadMoreBtn.style.display = (r.items.length >= r.total || state.limit >= 100) ? "none" : "";
+          })
+          .catch(function () {});
+      }
+
+      function setCategory(id) {
+        state.category_id = id;
+        state.limit = 24;
         refreshGrid();
       }
+
+      var chipsWrap = document.querySelector("#categories.chips");
+      if (chipsWrap) {
+        chipsWrap.querySelectorAll(".chip").forEach(function (chip) {
+          chip.addEventListener("click", function () {
+            var label = chip.textContent.trim().toLowerCase();
+            setCategory(label === "all categories" ? null : (idByName[label] || null));
+          });
+        });
+      }
+
+      var searchInput = document.getElementById("q-auctions");
+      var searchForm = searchInput && searchInput.closest("form");
+      if (searchForm) {
+        searchForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var q = searchInput.value.trim();
+          state.search = q.length >= 2 ? q : "";
+          state.limit = 24;
+          refreshGrid();
+        });
+      }
+
+      var sbCategory = document.getElementById("sb-category");
+      if (sbCategory) {
+        sbCategory.addEventListener("change", function () {
+          var label = sbCategory.value.trim().toLowerCase();
+          setCategory(label === "all categories" ? null : (idByName[label] || null));
+        });
+      }
+
+      var sbLocation = document.getElementById("sb-location");
+      if (sbLocation) {
+        sbLocation.addEventListener("change", function () {
+          state.city = sbLocation.value;
+          state.limit = 24;
+          refreshGrid();
+        });
+      }
+
+      var sortSelect = document.getElementById("sort-select");
+      if (sortSelect) {
+        sortSelect.addEventListener("change", function () {
+          var opt = SORT_OPTIONS[sortSelect.value.trim().toLowerCase()];
+          if (!opt) return;
+          state.sort_by = opt.sort_by;
+          state.sort_dir = opt.sort_dir;
+          state.limit = 24;
+          refreshGrid();
+        });
+      }
+
+      // Desktop aside + mobile drawer both render the same filters_markup(); wire
+      // whichever one the user applies (they share `state`, so either works).
+      document.querySelectorAll("[data-apply-filters]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var root = btn.closest(".filters, .filter-drawer__body");
+          if (!root) return;
+          var types = [];
+          root.querySelectorAll('input[name="seller_type"]:checked').forEach(function (c) { types.push(c.value); });
+          state.seller_type = types.join(",");
+          var loc = root.querySelector('input[name="location"]:checked');
+          state.city = loc ? loc.value : "";
+          var pmin = root.querySelector('input[id^="pmin-"]');
+          var pmax = root.querySelector('input[id^="pmax-"]');
+          var cmin = root.querySelector('input[id^="cmin-"]');
+          var cmax = root.querySelector('input[id^="cmax-"]');
+          state.min_price = pmin && pmin.value !== "" ? pmin.value : null;
+          state.max_price = pmax && pmax.value !== "" ? pmax.value : null;
+          state.min_credits = cmin && cmin.value !== "" ? cmin.value : null;
+          state.max_credits = cmax && cmax.value !== "" ? cmax.value : null;
+          var end = root.querySelector('input[type="radio"]:checked');
+          state.ends_within_hours = null;
+          state.ends_after_hours = null;
+          if (end && end.value === "168+") state.ends_after_hours = 168;
+          else if (end && end.value) state.ends_within_hours = end.value;
+          state.limit = 24;
+          refreshGrid();
+        });
+      });
+
+      // Location checkboxes act like a single-select radio group (city is one
+      // value server-side), enforced here since the markup uses checkboxes.
+      document.querySelectorAll('input[name="location"]').forEach(function (box) {
+        box.addEventListener("change", function () {
+          if (!box.checked) return;
+          var root = box.closest(".filters, .filter-drawer__body");
+          root.querySelectorAll('input[name="location"]').forEach(function (c) { if (c !== box) c.checked = false; });
+        });
+      });
+
+      document.querySelectorAll("[data-reset-filters]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          state = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
+          if (searchInput) searchInput.value = "";
+          if (sbCategory) sbCategory.value = "All categories";
+          if (sbLocation) sbLocation.value = "";
+          if (sortSelect) sortSelect.value = "Ending soonest";
+          // main.js's own reset handler (registered first) already unchecked every
+          // box; re-check "All locations" (value="") so the visible state matches
+          // the cleared filter instead of showing nothing selected.
+          document.querySelectorAll('input[name="location"][value=""]').forEach(function (c) { c.checked = true; });
+          // the chip click also flips the visual is-active state (main.js) and
+          // triggers refreshGrid via setCategory, so no separate call needed here.
+          if (chipsWrap) { var first = chipsWrap.querySelector(".chip"); if (first) first.click(); }
+          else refreshGrid();
+        });
+      });
+
+      var loadMoreBtn = document.querySelector("[data-load-more]");
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener("click", function () {
+          // renderAuctionGrid always replaces the grid wholesale, so "load more"
+          // just widens the page size and re-renders the full (larger) set.
+          state.limit = Math.min(state.limit + 24, 100);
+          refreshGrid();
+        });
+      }
+
+      refreshGrid();
     });
   }
 

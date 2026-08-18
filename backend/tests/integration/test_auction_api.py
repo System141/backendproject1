@@ -4,10 +4,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.domain import Auction, AuctionStatus, Category, User, UserRole
-from app.core.security import create_access_token
+from app.models.domain import (
+    Auction, AuctionStatus, Category, User, UserRole, SellerProfile, SellerVerificationStatus,
+)
+from app.core.security import create_access_token, hash_password
 
 
 class TestCreateAuction:
@@ -246,6 +249,80 @@ class TestListAuctions:
 
         by_city = await async_client.get("/api/auctions?city=Podgorica")
         assert any(a["title"] == "Old Timer" for a in by_city.json())
+
+    async def test_price_credit_and_end_time_filters(
+        self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User, test_category: Category
+    ):
+        cheap_soon = Auction(
+            id=str(uuid.uuid4()), seller_id=seller_user.id, category_id=test_category.id,
+            title="Cheap Soon", description="d", start_price=50.0, current_price=50.0,
+            min_increment=5.0, participation_credit_cost=1.0,
+            start_time=datetime.now(timezone.utc), end_time=datetime.now(timezone.utc) + timedelta(hours=2),
+            status=AuctionStatus.live,
+        )
+        pricey_later = Auction(
+            id=str(uuid.uuid4()), seller_id=seller_user.id, category_id=test_category.id,
+            title="Pricey Later", description="d", start_price=5000.0, current_price=5000.0,
+            min_increment=100.0, participation_credit_cost=10.0,
+            start_time=datetime.now(timezone.utc), end_time=datetime.now(timezone.utc) + timedelta(days=10),
+            status=AuctionStatus.live,
+        )
+        db_session.add_all([cheap_soon, pricey_later])
+        await db_session.commit()
+
+        by_price = await async_client.get("/api/auctions?min_price=1000")
+        titles = [a["title"] for a in by_price.json()]
+        assert "Pricey Later" in titles and "Cheap Soon" not in titles
+
+        by_credits = await async_client.get("/api/auctions?max_credits=2")
+        titles = [a["title"] for a in by_credits.json()]
+        assert "Cheap Soon" in titles and "Pricey Later" not in titles
+
+        ending_soon = await async_client.get("/api/auctions?ends_within_hours=24")
+        titles = [a["title"] for a in ending_soon.json()]
+        assert "Cheap Soon" in titles and "Pricey Later" not in titles
+
+        ending_later = await async_client.get("/api/auctions?ends_after_hours=168")
+        titles = [a["title"] for a in ending_later.json()]
+        assert "Pricey Later" in titles and "Cheap Soon" not in titles
+
+    async def test_seller_type_filter_accepts_comma_separated_list(
+        self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User, test_category: Category
+    ):
+        dealer = User(
+            id=str(uuid.uuid4()), name="Dealer Seller", email=f"dealer_{uuid.uuid4().hex[:8]}@example.com",
+            password_hash=hash_password("SellerPass123!"), role=UserRole.seller, status="active",
+            accepted_terms=True, accepted_privacy=True, marketing_consent=False, email_verified=True,
+        )
+        db_session.add(dealer)
+        await db_session.commit()
+        db_session.add(SellerProfile(
+            id=str(uuid.uuid4()), user_id=dealer.id, account_type="company",
+            verification_status=SellerVerificationStatus.verified, seller_type="dealer",
+        ))
+        insurer_profile = (await db_session.execute(
+            select(SellerProfile).where(SellerProfile.user_id == seller_user.id)
+        )).scalar_one()
+        insurer_profile.seller_type = "insurer"
+        await db_session.commit()
+
+        db_session.add(Auction(
+            id=str(uuid.uuid4()), seller_id=dealer.id, category_id=test_category.id,
+            title="Dealer Lot", description="d", start_price=100.0, current_price=100.0, min_increment=10.0,
+            start_time=datetime.now(timezone.utc), end_time=datetime.now(timezone.utc) + timedelta(days=3),
+            status=AuctionStatus.live,
+        ))
+        db_session.add(Auction(
+            id=str(uuid.uuid4()), seller_id=seller_user.id, category_id=test_category.id,
+            title="Insurer Lot", description="d", start_price=100.0, current_price=100.0, min_increment=10.0,
+            start_time=datetime.now(timezone.utc), end_time=datetime.now(timezone.utc) + timedelta(days=3),
+            status=AuctionStatus.live,
+        ))
+        await db_session.commit()
+
+        resp = await async_client.get("/api/auctions?seller_type=dealer,construction")
+        titles = [a["title"] for a in resp.json()]
+        assert "Dealer Lot" in titles and "Insurer Lot" not in titles
 
 
 class TestAutocomplete:

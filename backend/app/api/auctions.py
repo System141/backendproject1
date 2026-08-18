@@ -2,6 +2,7 @@ import csv
 import io
 import os
 import uuid
+from datetime import timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,9 +212,15 @@ async def list_auctions(
     search: str | None = Query(None, min_length=2, description="Search across Lot ID, title, description, brand, model, city (doc §13.1)"),
     city: str | None = Query(None, description="Filter by city/location"),
     seller_id: str | None = Query(None, description="Filter by seller"),
-    seller_type: str | None = Query(None, description="Filter by seller type (dealer, rent-a-car, insurer, construction, individual, ...) (doc §4.1)"),
+    seller_type: str | None = Query(None, description="Filter by seller type, comma-separated for multiple (dealer, rent-a-car, insurer, construction, individual, ...) (doc §4.1)"),
     winner_user_id: str | None = Query(None, description="Filter by winner"),
-    sort_by: str = Query("created_at", pattern=r"^(created_at|end_time|start_price|current_price)$"),
+    min_price: float | None = Query(None, ge=0, description="Filter by minimum current price"),
+    max_price: float | None = Query(None, ge=0, description="Filter by maximum current price"),
+    min_credits: float | None = Query(None, ge=0, description="Filter by minimum participation credit cost"),
+    max_credits: float | None = Query(None, ge=0, description="Filter by maximum participation credit cost"),
+    ends_within_hours: int | None = Query(None, ge=1, description="Only auctions ending within N hours"),
+    ends_after_hours: int | None = Query(None, ge=1, description="Only auctions ending more than N hours from now"),
+    sort_by: str = Query("created_at", pattern=r"^(created_at|end_time|start_price|current_price|participation_credit_cost)$"),
     sort_dir: str = Query("desc", pattern=r"^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -249,11 +256,28 @@ async def list_auctions(
     if seller_id:
         query = query.where(Auction.seller_id == seller_id)
     if seller_type:
+        types = [t.strip().lower() for t in seller_type.split(",") if t.strip()]
         query = query.join(User, User.id == Auction.seller_id).join(
             SellerProfile, SellerProfile.user_id == User.id
-        ).where(SellerProfile.seller_type.ilike(f"%{seller_type}%"))
+        ).where(func.lower(SellerProfile.seller_type).in_(types))
     if winner_user_id:
         query = query.where(Auction.winner_user_id == winner_user_id)
+    if min_price is not None:
+        query = query.where(Auction.current_price >= min_price)
+    if max_price is not None:
+        query = query.where(Auction.current_price <= max_price)
+    # ponytail: participation_credit_cost is nullable (falls back to
+    # PlatformSettings.default_participation_credit_cost when unset), so a
+    # NULL row is excluded by these filters and sorts first/last depending on
+    # DB — coalesce to the platform default here if that mismatch bites.
+    if min_credits is not None:
+        query = query.where(Auction.participation_credit_cost >= min_credits)
+    if max_credits is not None:
+        query = query.where(Auction.participation_credit_cost <= max_credits)
+    if ends_within_hours is not None:
+        query = query.where(Auction.end_time <= _utcnow() + timedelta(hours=ends_within_hours))
+    if ends_after_hours is not None:
+        query = query.where(Auction.end_time > _utcnow() + timedelta(hours=ends_after_hours))
 
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     response.headers["X-Total-Count"] = str(count_result.scalar())

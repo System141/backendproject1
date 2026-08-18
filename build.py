@@ -581,42 +581,40 @@ chips = "".join(
     f'<button class="chip{" is-active" if act else ""}" type="button" aria-pressed="{"true" if act else "false"}">{i(ic, 16)}{n}</button>'
     for ic, n, act in CHIPS)
 
-PARTNERS = [("Ritchie Bros. Auctioneers", True), ("Copart", True), ("IronPlanet", False),
-            ("YachtWorld Auctions", False), ("Savills Auctions", False)]
-LOCATIONS = [("All locations", True), ("United Arab Emirates", False), ("United States", False),
-             ("United Kingdom", False), ("Germany", False), ("Singapore", False)]
+SELLER_TYPES = [("Dealer", "dealer", False), ("Rent-a-car", "rent-a-car", False), ("Insurer", "insurer", False),
+                ("Construction", "construction", False), ("Individual seller", "individual", False)]
+LOCATIONS = [("All locations", "", True), ("United Arab Emirates", "United Arab Emirates", False),
+             ("United States", "United States", False), ("United Kingdom", "United Kingdom", False),
+             ("Germany", "Germany", False), ("Singapore", "Singapore", False)]
 
 
 def checks(name, items):
     out = ""
-    for n, (label, checked) in enumerate(items):
+    for label, value, checked in items:
         ck = " checked" if checked else ""
-        out += f'''<label class="check"><input type="checkbox" name="{name}"{ck}><span class="check__box">{i("check", 11)}</span>
-<span class="check__label">{label}</span>{'<span class="pill pill--blue">Verified</span>' if name == "partner" else ""}</label>'''
+        out += f'''<label class="check"><input type="checkbox" name="{name}" value="{value}"{ck}><span class="check__box">{i("check", 11)}</span>
+<span class="check__label">{label}</span></label>'''
     return out
 
 
-ENDTIMES = ["Any time", "Ending within 24 hours", "Ending within 3 days", "Ending within 7 days", "Ending in 7+ days"]
+ENDTIMES = [("Any time", ""), ("Ending within 24 hours", "24"), ("Ending within 3 days", "72"),
+            ("Ending within 7 days", "168"), ("Ending in 7+ days", "168+")]
 
 
 def filters_markup(sfx):
     radios = "".join(
-        f'<label class="radio"><input type="radio" name="end-{sfx}"{" checked" if n == 0 else ""}><span class="radio__dot"></span>{t}</label>'
-        for n, t in enumerate(ENDTIMES))
+        f'<label class="radio"><input type="radio" name="end-{sfx}" value="{v}"{" checked" if n == 0 else ""}><span class="radio__dot"></span>{t}</label>'
+        for n, (t, v) in enumerate(ENDTIMES))
     return f'''<div class="filters__group is-open">
-<button class="filters__head" type="button" aria-expanded="true">Partner auction {i("chev-d", 17)}</button>
+<button class="filters__head" type="button" aria-expanded="true">Seller type {i("chev-d", 17)}</button>
 <div class="filters__body"><div><div class="inner">
-<div class="input-search"><label class="sr-only" for="pf-{sfx}">Search partner</label><input class="input" id="pf-{sfx}" type="search" placeholder="Search partner…">{i("search", 15)}</div>
-{checks("partner", PARTNERS)}
-<a class="link-arrow" href="#">View all partners</a>
+{checks("seller_type", SELLER_TYPES)}
 </div></div></div>
 </div>
 <div class="filters__group">
 <button class="filters__head" type="button" aria-expanded="false">Location {i("chev-d", 17)}</button>
 <div class="filters__body"><div><div class="inner">
-<div class="input-search"><label class="sr-only" for="lf-{sfx}">Search location</label><input class="input" id="lf-{sfx}" type="search" placeholder="Search location…">{i("search", 15)}</div>
 {checks("location", LOCATIONS)}
-<a class="link-arrow" href="#">View all</a>
 </div></div></div>
 </div>
 <div class="filters__group">
@@ -644,7 +642,7 @@ def filters_markup(sfx):
 </div></div></div>
 </div>
 <div class="filters__actions">
-<button class="btn btn--primary btn--block" type="button">Apply filters</button>
+<button class="btn btn--primary btn--block" type="button" data-apply-filters data-filters-close>Apply filters</button>
 <button class="btn btn--outline btn--block" type="button" data-reset-filters>Reset filters</button>
 </div>'''
 
@@ -682,8 +680,8 @@ auctions_body = f'''
 <button class="searchbar__btn" type="submit" aria-label="Search">{i("search", 18)}</button>
 </div>
 <div class="searchbar__opts">
-<label class="select"><span class="sr-only">Category</span><select><option>All categories</option><option>Cars</option><option>Heavy equipment</option><option>Real estate</option><option>Marine</option><option>Luxury</option></select></label>
-<label class="select"><span class="sr-only">Location</span><select><option>All locations</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Germany</option></select></label>
+<label class="select"><span class="sr-only">Category</span><select id="sb-category"><option>All categories</option><option>Cars</option><option>Heavy Equipment</option><option>Real Estate</option><option>Marine</option><option>Luxury</option></select></label>
+<label class="select"><span class="sr-only">Location</span><select id="sb-location"><option value="">All locations</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Germany</option></select></label>
 </div>
 <button class="btn btn--outline btn-filters" type="button" data-filters-open>{i("sliders", 17)}Filters</button>
 </form>
@@ -699,12 +697,12 @@ auctions_body = f'''
 <p class="count">1,248 results found</p>
 <div style="display:flex;gap:8px;align-items:center">
 <label class="select"><span class="sr-only">Sort by</span>
-<select><option>Ending soonest</option><option>Newly listed</option><option>Price: low to high</option><option>Price: high to low</option><option>Fewest credits</option></select></label>
+<select id="sort-select"><option>Ending soonest</option><option>Newly listed</option><option>Price: low to high</option><option>Price: high to low</option><option>Fewest credits</option></select></label>
 </div>
 </div>
 <div class="grid-auctions">{"".join(auction_card(a, n, lazy=(n > 2)) for n, a in enumerate(AUCTIONS))}</div>
 <div style="display:flex;justify-content:center;margin-top:24px">
-<button class="btn btn--outline btn--lg" type="button">Load more auctions</button>
+<button class="btn btn--outline btn--lg" type="button" data-load-more>Load more auctions</button>
 </div>
 </div>
 </div>

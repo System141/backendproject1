@@ -85,15 +85,20 @@
   }
 
   var CATEGORY_IMAGES = [
-    [/vehicle/i, "car"],
-    [/equipment/i, "excavator"],
+    [/^cars$/i, "car"],
+    [/heavy equipment/i, "excavator"],
+    [/real estate/i, "villa"],
+    [/marine/i, "yacht"],
+    [/luxury/i, "watch"],
+    [/industrial machinery/i, "cnc"],
     [/electronic/i, "watch"],
+    [/truck/i, "truck"],
   ];
   function pickImage(categoryName) {
     for (var i = 0; i < CATEGORY_IMAGES.length; i++) {
       if (CATEGORY_IMAGES[i][0].test(categoryName || "")) return CATEGORY_IMAGES[i][1];
     }
-    return "cnc"; // generic commercial-assets fallback
+    return "cnc"; // generic fallback
   }
 
   /* -------------------------------------------------------------- header -- */
@@ -227,7 +232,7 @@
 
   /* ----------------------------------------------------------- auctions -- */
   function fetchCategories() {
-    return fetch(API_BASE + "/categories").then(function (res) { return res.json(); })
+    return fetch(API_BASE + "/auctions/categories").then(function (res) { return res.json(); })
       .then(function (list) {
         var map = {};
         list.forEach(function (c) { map[c.id] = c; });
@@ -305,13 +310,33 @@
           .catch(function () {});
       }
       if (grid) {
-        fetchAuctions({ limit: 24, sort_by: "end_time", sort_dir: "asc" })
-          .then(function (r) {
-            renderAuctionGrid(".grid-auctions", r.items, categoriesById);
-            var countEl = document.querySelector(".count");
-            if (countEl) countEl.textContent = r.total + " results found";
-          })
-          .catch(function () {});
+        var activeCategoryId = null;
+        function refreshGrid() {
+          var params = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
+          if (activeCategoryId) params.category_id = activeCategoryId;
+          fetchAuctions(params)
+            .then(function (r) {
+              renderAuctionGrid(".grid-auctions", r.items, categoriesById);
+              var countEl = document.querySelector(".count");
+              if (countEl) countEl.textContent = r.total + " results found";
+            })
+            .catch(function () {});
+        }
+        var chipsWrap = document.querySelector("#categories.chips");
+        if (chipsWrap) {
+          var idByName = {};
+          Object.keys(categoriesById).forEach(function (id) {
+            idByName[categoriesById[id].name.toLowerCase()] = categoriesById[id].id;
+          });
+          chipsWrap.querySelectorAll(".chip").forEach(function (chip) {
+            chip.addEventListener("click", function () {
+              var label = chip.textContent.trim().toLowerCase();
+              activeCategoryId = label === "all categories" ? null : (idByName[label] || null);
+              refreshGrid();
+            });
+          });
+        }
+        refreshGrid();
       }
     });
   }
@@ -883,6 +908,33 @@
         }).catch(function (err) { banner(err.message || "Failed to load listing.", "error"); });
       }
 
+      var bulkBtn = document.getElementById("acct-bulk-upload-btn");
+      if (bulkBtn) bulkBtn.addEventListener("click", function () {
+        var fileInput = document.getElementById("acct-bulk-csv");
+        var resultEl = document.getElementById("acct-bulk-result");
+        if (!fileInput.files.length) { resultEl.textContent = "Choose a CSV file first."; return; }
+        var fd = new FormData();
+        fd.append("file", fileInput.files[0]);
+        resultEl.textContent = "Uploading…";
+        fetch(API_BASE + "/auctions/bulk-import", {
+          method: "POST",
+          headers: token() ? { Authorization: "Bearer " + token() } : {},
+          body: fd,
+        }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (r) {
+            if (!r.ok) { resultEl.textContent = r.data.detail || "Upload failed."; return; }
+            var msg = r.data.created + " created, " + r.data.failed + " failed.";
+            if (r.data.failed) {
+              msg += " Errors: " + r.data.results.filter(function (x) { return x.status === "error"; })
+                .map(function (x) { return "row " + x.row + ": " + x.detail; }).join("; ");
+            }
+            resultEl.textContent = msg;
+            fileInput.value = "";
+            refreshListings();
+          })
+          .catch(function () { resultEl.textContent = "Upload failed."; });
+      });
+
       var newBtn = document.getElementById("acct-listing-new-btn");
       if (newBtn) newBtn.addEventListener("click", function () {
         hideListingForm();
@@ -1011,10 +1063,22 @@
     if (sellerForm) {
       sellerForm.addEventListener("submit", function (e) {
         e.preventDefault();
+        var docInput = document.getElementById("acct-seller-doc");
+        var docFile = docInput && docInput.files[0];
         api("/sellers/apply", {
           method: "POST",
           body: { account_type: document.getElementById("acct-seller-type").value },
         })
+          .then(function () {
+            if (!docFile) return;
+            var fd = new FormData();
+            fd.append("file", docFile);
+            return fetch(API_BASE + "/sellers/me/verification-document", {
+              method: "POST",
+              headers: token() ? { Authorization: "Bearer " + token() } : {},
+              body: fd,
+            }).then(function (res) { if (!res.ok) throw new Error("Application submitted, but the document upload failed."); });
+          })
           .then(function () { banner("Application submitted — we'll review it soon."); })
           .catch(function (err) { banner(err.message, "error"); });
       });
@@ -1608,9 +1672,34 @@
     }
   }
 
+  /* --------------------------------------------------- legal content modal */
+  var LEGAL_TITLES = { terms_of_service: "Terms of Service", privacy_policy: "Privacy Policy", cookie_policy: "Cookie Policy" };
+  function wireLegalModal() {
+    var dialog = document.getElementById("legal-modal");
+    if (!dialog) return;
+    var titleEl = document.getElementById("legal-modal-title");
+    var bodyEl = document.getElementById("legal-modal-body");
+    dialog.querySelector(".legal-modal__close").addEventListener("click", function () { dialog.close(); });
+    dialog.addEventListener("click", function (e) { if (e.target === dialog) dialog.close(); });
+    document.querySelectorAll("[data-legal]").forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        var type = link.getAttribute("data-legal");
+        titleEl.textContent = LEGAL_TITLES[type] || type;
+        bodyEl.textContent = "Loading…";
+        dialog.showModal();
+        fetch(API_BASE + "/legal/" + type)
+          .then(function (res) { if (!res.ok) throw new Error("not found"); return res.json(); })
+          .then(function (doc) { bodyEl.textContent = doc.content; })
+          .catch(function () { bodyEl.textContent = "This document is being prepared. Please check back soon."; });
+      });
+    });
+  }
+
   /* --------------------------------------------------------------- init -- */
   paintHeader();
   handleHashActions();
+  wireLegalModal();
   wireAuctionListings();
   wireAuctionDetail();
   wireAccountPage();

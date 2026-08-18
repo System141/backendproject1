@@ -134,16 +134,25 @@ FOOT_COLS = [
                      ("How It Works", "index.html#how"), ("Buy Credits", "credits.html")]),
     ("For Partners", [("Partner Program", "index.html#partners"), ("Sell with Us", "index.html#partners"),
                       ("Resources", "credits.html#faq"), ("Success Stories", "index.html#partners")]),
-    ("Company", [("About Us", "#"), ("Careers", "#"), ("News", "#"), ("Contact Us", "support.html")]),
-    ("Support", [("Help Center", "credits.html#faq"), ("Terms of Use", "#"),
-                 ("Privacy Policy", "#"), ("Cookie Policy", "#")]),
+    ("Company", [("About Us", "index.html#about"), ("Careers", "#"), ("News", "#"), ("Contact Us", "support.html")]),
+    ("Support", [("Help Center", "credits.html#faq"), ("Terms of Use", "legal:terms_of_service"),
+                 ("Privacy Policy", "legal:privacy_policy"), ("Cookie Policy", "legal:cookie_policy")]),
 ]
+
+
+def _foot_link(t, h):
+    # "legal:<document_type>" opens the legal-content dialog instead of navigating
+    # (see wireLegalModal() in assets/js/api.js) - the text itself lives in the
+    # TermsDocument table (admin-authored via POST /api/admin/legal), not here.
+    if h.startswith("legal:"):
+        return f'<li><a href="#" data-legal="{h[6:]}">{t}</a></li>'
+    return f'<li><a href="{h}">{t}</a></li>'
 
 
 def footer():
     cols = ""
     for title, links in FOOT_COLS:
-        ls = "".join(f'<li><a href="{h}">{t}</a></li>' for t, h in links)
+        ls = "".join(_foot_link(t, h) for t, h in links)
         cols += f'<div class="ftr__col"><h4>{title}</h4><ul>{ls}</ul></div>'
     socials = "".join(
         f'<a href="#" aria-label="{n.capitalize()}">{i(n, 17)}</a>'
@@ -166,7 +175,11 @@ def footer():
 </div>
 </div>
 </div>
-</footer>'''
+</footer>
+<dialog id="legal-modal" class="legal-modal">
+<div class="legal-modal__head"><h3 id="legal-modal-title"></h3><button type="button" class="legal-modal__close" aria-label="Close">{i("x", 16)}</button></div>
+<div id="legal-modal-body" class="legal-modal__body"></div>
+</dialog>'''
 
 
 def page(title, desc, active, body, body_class="", tabbar="", canonical="", preload=""):
@@ -403,6 +416,11 @@ home_body = f'''
 <section class="section wrap">
 {stats([("users", "50,000+", "Registered buyers"), ("shield", "400+", "Verified partners"),
         ("clock", "100,000+", "Auctions every month"), ("package", "€250M+", "In assets unlocked")])}
+</section>
+
+<section class="section--tight wrap" id="about">
+<h2 class="h2" style="margin-bottom:8px">About BidMont</h2>
+<p class="lead" style="font-size:13.5px;max-width:640px">BidMont is an online auction marketplace for Montenegro and the wider Balkans, connecting verified sellers of vehicles, equipment and commercial assets with serious, credit-backed buyers. Every listing and every bidder goes through our verification process before a single bid is placed.</p>
 </section>
 '''
 
@@ -835,7 +853,7 @@ auth_body = f'''
 </div>
 <div class="field">
 <label class="check" style="align-items:flex-start"><input type="checkbox" name="terms" required><span class="check__box" style="margin-top:1px">{i("check", 11)}</span>
-<span class="check__label tiny">I agree to the <a class="red" href="#" style="font-weight:600;text-decoration:underline">Terms of Service</a> and <a class="red" href="#" style="font-weight:600;text-decoration:underline">Privacy Policy</a></span></label>
+<span class="check__label tiny">I agree to the <a class="red" href="#" data-legal="terms_of_service" style="font-weight:600;text-decoration:underline">Terms of Service</a> and <a class="red" href="#" data-legal="privacy_policy" style="font-weight:600;text-decoration:underline">Privacy Policy</a></span></label>
 <p class="field__error">Accept the terms to continue.</p>
 </div>
 <button class="btn btn--primary btn--block btn--lg" type="submit">Create account</button>
@@ -1067,6 +1085,7 @@ account_body = f'''
 <p class="tiny" style="margin-bottom:12px" id="acct-seller-apply-note">Verify your email, then apply to become a seller.</p>
 <form id="acct-seller-form">
 <div class="field"><label for="acct-seller-type">Account type</label><div class="field__wrap">{i("user", 17)}<select id="acct-seller-type"><option value="individual">Individual</option><option value="company">Company</option></select></div></div>
+<div class="field"><label for="acct-seller-doc">Verification document (registration certificate, ID — optional)</label><input type="file" id="acct-seller-doc" accept=".jpg,.jpeg,.png,.webp,.pdf"></div>
 <button class="btn btn--outline" type="submit">Apply to sell</button>
 </form>
 </div>
@@ -1075,6 +1094,13 @@ account_body = f'''
 
 <div class="pane" id="pane-listings" role="tabpanel" aria-labelledby="tab-listings" tabindex="0">
 <div class="features" id="acct-seller-stats" style="margin-bottom:14px"></div>
+<div class="panel" style="margin-bottom:14px">
+<h3 class="h3" style="margin-bottom:8px">Bulk upload (CSV)</h3>
+<p class="tiny" style="margin-bottom:10px">Columns: title, description, category_id, start_price, min_increment, end_time, declaration_accepted (plus any optional listing field). One row per listing.</p>
+<input type="file" id="acct-bulk-csv" accept=".csv">
+<button class="btn btn--outline" type="button" id="acct-bulk-upload-btn" style="margin-left:8px">Upload CSV</button>
+<div id="acct-bulk-result" class="tiny" style="margin-top:10px"></div>
+</div>
 <div class="panel" style="margin-bottom:14px">
 <button class="btn btn--outline" type="button" id="acct-listing-new-btn">+ New listing</button>
 <form id="acct-listing-form" class="is-hidden" style="margin-top:14px" novalidate>

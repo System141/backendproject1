@@ -87,6 +87,9 @@ MISSING_COLUMNS = {
     "notifications": [
         ("event_key", "VARCHAR"),
     ],
+    "seller_profiles": [
+        ("verification_document", "VARCHAR"),
+    ],
 }
 
 # Postgres native enum types don't gain new labels automatically when the

@@ -1,12 +1,18 @@
 """
-Doc §7.2.1: "Menu, category slug, admin taxonomy ve filters aynı yapıdan
-beslenmeli" - the top-level categories and the nine named Commercial Assets
-subcategories must exist as real Category rows (using the existing
-parent_id column), not just hardcoded frontend strings.
+Top-level categories match the marketing taxonomy shown across the site
+(hero trending cards, auctions.html category chips) rather than the doc's
+original Vehicles/Equipment/Commercial-Assets grouping - the frontend
+copy was the one already shipped and user-facing, so the category rows
+were brought in line with it instead of relabeling the whole site.
 
-Idempotent by design so it's safe to run on every startup: checked by name
-(top-level) and (name, parent_id) (children) rather than by slug, since an
-existing deployment's slugs may not match a freshly-derived one.
+Idempotent by design so it's safe to run on every startup: checked by name,
+since an existing deployment's slugs may not match a freshly-derived one.
+
+# ponytail: seeding is additive-only (never renames/deletes). A deployment
+# migrated from the old Vehicles/Equipment/Commercial Assets taxonomy keeps
+# those rows alongside the new ones until an admin manually deactivates them
+# via PUT /admin/categories/{id} (status=inactive). Fine for the current
+# single-admin/dev stage; write a one-off cleanup script if that changes.
 """
 import logging
 import re
@@ -19,12 +25,10 @@ from app.models.domain import Category
 
 logger = logging.getLogger("bidmont.category_seed")
 
-TOP_LEVEL = ["Vehicles", "Equipment", "Commercial Assets"]
-
-# Doc §7.2.1's exact subcategory list, seeded under "Commercial Assets".
-COMMERCIAL_SUBCATEGORIES = [
-    "Hospitality", "Restaurant Equipment", "Electronics", "Office",
-    "Retail Equipment", "Inventory & Stock", "Furniture", "Tools", "Other",
+# Must match the CHIPS list in build.py (auctions.html filter chips) by name.
+TOP_LEVEL = [
+    "Cars", "Heavy Equipment", "Real Estate", "Marine",
+    "Luxury", "Industrial Machinery", "Electronics", "Trucks",
 ]
 
 
@@ -42,20 +46,6 @@ async def seed_default_categories(db: AsyncSession) -> None:
             continue
         cat = Category(name=name, slug=f"{_slugify(name)}-{uuid.uuid4().hex[:6]}", status="active")
         db.add(cat)
-        await db.flush()
-        by_name[name] = cat
-        logger.info(f"Category seed: added top-level '{name}'")
-
-    commercial_parent = by_name["Commercial Assets"]
-    existing_children = {c.name for c in existing if c.parent_id == commercial_parent.id}
-    for name in COMMERCIAL_SUBCATEGORIES:
-        if name in existing_children:
-            continue
-        cat = Category(
-            name=name, slug=f"{_slugify(name)}-{uuid.uuid4().hex[:6]}",
-            parent_id=commercial_parent.id, status="active",
-        )
-        db.add(cat)
-        logger.info(f"Category seed: added '{name}' under Commercial Assets")
+        logger.info(f"Category seed: added '{name}'")
 
     await db.commit()

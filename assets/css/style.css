@@ -960,3 +960,11 @@ body.has-tabbar { padding-bottom: 62px; }
 /* Contain stray overhang at the document level. Applied to <html> rather than a
    wrapper so it does not become the sticky scrollport for the header/sidebar. */
 html { overflow-x: clip; }
+
+/* --- Legal content modal (Terms/Privacy/Cookie — native <dialog>) --- */
+.legal-modal { border: 0; border-radius: 14px; padding: 0; width: min(560px, 92vw); max-height: 80vh; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.legal-modal::backdrop { background: rgba(16,17,20,.5); }
+.legal-modal__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.legal-modal__head h3 { font-size: 16px; margin: 0; }
+.legal-modal__close { background: none; border: 0; color: var(--ink-2); cursor: pointer; padding: 4px; line-height: 0; }
+.legal-modal__body { padding: 16px 18px; overflow-y: auto; max-height: calc(80vh - 60px); font-size: 13.5px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; }

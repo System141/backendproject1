@@ -529,3 +529,57 @@ class TestContactUnlock:
 
         response = await async_client.get(f"/api/auctions/{auction.id}/contact", headers=seller_headers)
         assert response.status_code == 404
+
+
+class TestBulkImportAuctions:
+    async def test_mixed_valid_and_invalid_rows(
+        self, async_client: AsyncClient, seller_headers: dict, test_category: Category
+    ):
+        """One good row and one row missing a required column - the good row
+        must still be created and the bad row reported, not the whole batch rejected."""
+        end_time = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        csv_content = (
+            "title,description,category_id,start_price,min_increment,end_time,declaration_accepted,brand\n"
+            f"Bulk Car One,A perfectly fine listing,{test_category.id},1000,50,{end_time},true,Toyota\n"
+            f",Missing title so this row must fail,{test_category.id},1000,50,{end_time},true,Honda\n"
+        )
+        response = await async_client.post(
+            "/api/auctions/bulk-import",
+            files={"file": ("listings.csv", csv_content, "text/csv")},
+            headers=seller_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["created"] == 1
+        assert data["failed"] == 1
+        assert data["results"][0]["status"] == "created"
+        assert data["results"][1]["status"] == "error"
+
+    async def test_rejects_non_csv_file(self, async_client: AsyncClient, seller_headers: dict):
+        response = await async_client.post(
+            "/api/auctions/bulk-import",
+            files={"file": ("listings.txt", "not a csv", "text/plain")},
+            headers=seller_headers,
+        )
+        assert response.status_code == 400
+
+
+class TestListCategories:
+    async def test_public_no_auth_required(self, async_client: AsyncClient, test_category: Category):
+        """GET /api/auctions/categories must work with no Authorization header -
+        every page (including logged-out visitors) depends on it."""
+        response = await async_client.get("/api/auctions/categories")
+        assert response.status_code == 200
+        names = {c["name"] for c in response.json()}
+        assert test_category.name in names
+
+    async def test_excludes_inactive(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_category: Category
+    ):
+        inactive = Category(id=999, name="Retired Category", slug="retired-category", status="inactive")
+        db_session.add(inactive)
+        await db_session.commit()
+
+        response = await async_client.get("/api/auctions/categories")
+        names = {c["name"] for c in response.json()}
+        assert "Retired Category" not in names

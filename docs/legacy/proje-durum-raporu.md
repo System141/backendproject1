@@ -1,4 +1,6 @@
-# BidMont Projesi — Mevcut Durum İnceleme Raporu
+> ⚠️ **Arşivlendi (18.08.2026):** Bu rapor 01.08.2026'ya kadarki durumu izliyor — yani `docs/legacy/frontend-classic-spa/` altına arşivlenen, tek dosyalı hash-routed eski SPA (`index.html` + `renderAdminAuctions()`/`bidmontApi`/`adminFetch` vb.) için yazılmış. 09.08.2026'da siteyi yeniden inşa eden "New UI" commit'inden ÖNCEye ait; şu anki çok sayfalı site (`build.py` ile üretilen `index.html`/`auctions.html`/`auth.html`/...) burada anlatılan mimariyle uyuşmuyor. Güncel site için faz durumu: `docs/fazkontrol-durum.md`.
+
+# BidMont Projesi — Mevcut Durum İnceleme Raporu (ARŞİV — eski tek-dosya SPA)
 
 **Tarih:** 26.06.2026 (Güncelleme)  
 **Önceki Rapor:** 25.06.2026  

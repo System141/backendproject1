@@ -1,7 +1,9 @@
+import csv
+import io
 import os
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, asc, func
 from sqlalchemy.orm import selectinload
@@ -29,6 +31,7 @@ from app.schemas.auction import (
 )
 from app.schemas.bid import JoinedAuctionResponse
 from app.schemas.credit import ReasonRequest
+from app.schemas.category import CategoryResponse
 
 auctions_router = APIRouter(prefix="/api/auctions", tags=["auctions"])
 
@@ -146,6 +149,57 @@ async def create_auction(
     auction = await _get_auction_or_404(db, auction_id)
 
     return _build_auction_response(auction)
+
+
+# ========== BULK IMPORT (doc FAZ 8: corporate seller CSV upload) ==========
+@auctions_router.post("/bulk-import")
+async def bulk_import_auctions(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_seller),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV -> listing, one row at a time, each routed through create_auction()
+    above so validation/fees/lot-code generation stay defined in exactly one
+    place - this endpoint is only the CSV-to-request adapter. Required
+    columns: title, description, category_id, start_price, min_increment,
+    end_time, declaration_accepted. Every other AuctionCreateRequest field is
+    an optional column. Rows fail independently; one bad row doesn't block
+    the rest of the batch."""
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a .csv file")
+    try:
+        text = (await file.read()).decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
+
+    results = []
+    for row_num, row in enumerate(csv.DictReader(io.StringIO(text)), start=2):  # row 1 is the header
+        cleaned = {k: (v.strip() or None if isinstance(v, str) else v) for k, v in row.items()}
+        try:
+            req = AuctionCreateRequest(**cleaned)
+            auction = await create_auction(req, current_user, db)
+            results.append({"row": row_num, "status": "created", "auction_id": auction.id, "title": auction.title})
+        except HTTPException as e:
+            await db.rollback()
+            results.append({"row": row_num, "status": "error", "detail": e.detail})
+        except Exception as e:
+            await db.rollback()
+            results.append({"row": row_num, "status": "error", "detail": str(e)})
+
+    return {
+        "created": sum(1 for r in results if r["status"] == "created"),
+        "failed": sum(1 for r in results if r["status"] == "error"),
+        "results": results,
+    }
+
+
+# ========== CATEGORIES (public) ==========
+@auctions_router.get("/categories", response_model=list[CategoryResponse])
+async def list_categories(db: AsyncSession = Depends(get_db)):
+    """Public category list - every page needs this for category names/images
+    and the auctions filter chips, so no auth required."""
+    result = await db.execute(select(Category).where(Category.status == "active").order_by(asc(Category.id)))
+    return result.scalars().all()
 
 
 # ========== LIST (public) ==========

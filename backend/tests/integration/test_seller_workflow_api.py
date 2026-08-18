@@ -229,3 +229,46 @@ class TestListingReviewWorkflow:
         )
         assert resp.status_code == 201
         assert resp.json()["contact_flagged"] is False
+
+
+class TestVerificationDocument:
+    async def test_owner_uploads_then_downloads_own_document(
+        self, async_client: AsyncClient, seller_headers: dict
+    ):
+        upload = await async_client.post(
+            "/api/sellers/me/verification-document",
+            files={"file": ("id-card.png", b"\x89PNG fake bytes", "image/png")},
+            headers=seller_headers,
+        )
+        assert upload.status_code == 200
+        profile_id = upload.json()["id"]
+        assert upload.json()["verification_document"]
+
+        download = await async_client.get(
+            f"/api/sellers/{profile_id}/verification-document", headers=seller_headers
+        )
+        assert download.status_code == 200
+
+    async def test_stranger_cannot_download_document(
+        self, async_client: AsyncClient, seller_headers: dict, auth_headers: dict
+    ):
+        """auth_headers belongs to a different (buyer) user than the seller."""
+        upload = await async_client.post(
+            "/api/sellers/me/verification-document",
+            files={"file": ("id-card.png", b"\x89PNG fake bytes", "image/png")},
+            headers=seller_headers,
+        )
+        profile_id = upload.json()["id"]
+
+        resp = await async_client.get(
+            f"/api/sellers/{profile_id}/verification-document", headers=auth_headers
+        )
+        assert resp.status_code == 403
+
+    async def test_rejects_invalid_file_type(self, async_client: AsyncClient, seller_headers: dict):
+        resp = await async_client.post(
+            "/api/sellers/me/verification-document",
+            files={"file": ("notes.txt", b"plain text", "text/plain")},
+            headers=seller_headers,
+        )
+        assert resp.status_code == 400

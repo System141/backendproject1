@@ -21,6 +21,7 @@ class SellerProfileResponse(BaseModel):
     authorized_person: Optional[str] = None
     city: Optional[str] = None
     seller_type: Optional[str] = None
+    verification_document: Optional[str] = None
     verification_status: str
     rejection_reason: Optional[str] = None
     reviewed_at: Optional[datetime] = None

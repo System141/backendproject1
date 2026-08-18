@@ -1,8 +1,10 @@
 """Seller application API (doc §11.1/§11.2): Apply -> Admin Review -> Verified Seller.
 Verification itself (and the role promotion it triggers) is an admin-only
 action - see app/api/admin.py's SELLER APPLICATIONS section."""
+import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,6 +13,7 @@ from app.core.security import get_current_user
 from app.models.domain import SellerProfile, SellerVerificationStatus, User
 from app.schemas.seller import SellerApplicationRequest, SellerProfileResponse
 from app.services.notifications import send_notification, NotificationType
+from app.api.uploads import ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE, PRIVATE_UPLOAD_DIR
 
 sellers_router = APIRouter(prefix="/api/sellers", tags=["sellers"])
 
@@ -95,3 +98,61 @@ async def apply_as_seller(
     )
 
     return profile
+
+
+@sellers_router.post("/me/verification-document", response_model=SellerProfileResponse)
+async def upload_verification_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Doc §11.2/§11.3: corporate verification document (registration
+    certificate, authorized-person ID, etc). Same storage/validation as
+    auction documents (private_uploads/, image or PDF, 10 MB cap) but
+    profile-scoped since a seller may not have any auctions yet."""
+    result = await db.execute(select(SellerProfile).where(SellerProfile.user_id == current_user.id))
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Apply as a seller before uploading a verification document")
+
+    ext = ALLOWED_DOCUMENT_TYPES.get(file.content_type)
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file.content_type}. Allowed: {', '.join(ALLOWED_DOCUMENT_TYPES)}",
+        )
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    with open(os.path.join(PRIVATE_UPLOAD_DIR, filename), "wb") as f:
+        f.write(content)
+
+    profile.verification_document = filename
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
+
+@sellers_router.get("/{profile_id}/verification-document")
+async def download_verification_document(
+    profile_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Secure download - only the profile's own owner or staff (never a
+    public URL), same authorization shape as the auction document endpoint."""
+    result = await db.execute(select(SellerProfile).where(SellerProfile.id == profile_id))
+    profile = result.scalars().first()
+    if not profile or not profile.verification_document:
+        raise HTTPException(status_code=404, detail="No verification document on file")
+
+    is_staff = current_user.role.value in ("admin", "super_admin", "support")
+    if not is_staff and current_user.id != profile.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this document")
+
+    filepath = os.path.join(PRIVATE_UPLOAD_DIR, profile.verification_document)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="File missing on disk")
+    return FileResponse(filepath, filename=os.path.basename(filepath))

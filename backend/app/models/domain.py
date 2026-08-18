@@ -434,6 +434,11 @@ class SellerProfile(Base):
     authorized_person = Column(String, nullable=True)
     city = Column(String, nullable=True)  # registered/operating city in Montenegro
     seller_type = Column(String, nullable=True)  # dealer, rent-a-car, insurer, construction, individual, ...
+    # Doc §11.2/§11.3 corporate verification document (registration cert,
+    # authorized-person ID, etc). Filename only, stored in private_uploads/
+    # like AuctionImage documents - served only via the owner/staff-checked
+    # download endpoint in app/api/sellers.py, never through a public mount.
+    verification_document = Column(String, nullable=True)
     verification_status = Column(Enum(SellerVerificationStatus, native_enum=False, length=50), nullable=False, default=SellerVerificationStatus.pending)
     rejection_reason = Column(Text, nullable=True)
     reviewed_by = Column(String, ForeignKey("users.id"), nullable=True)

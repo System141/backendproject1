@@ -104,15 +104,20 @@ class Auction(Base):
     __tablename__ = "auctions"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    seller_id = Column(String, ForeignKey("users.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    # index=True on these: every GET /api/auctions call (auctions.html's rail,
+    # grid, chips, filters and sort all route through it - app/api/auctions.py
+    # list_auctions) filters on status/category_id/seller_id and sorts on
+    # end_time/created_at/current_price/participation_credit_cost. Matching
+    # CREATE INDEX added to migrations.py MISSING_INDEXES for existing DBs.
+    seller_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     start_price = Column(Float, nullable=False)
-    current_price = Column(Float, nullable=False)
+    current_price = Column(Float, nullable=False, index=True)
     min_increment = Column(Float, nullable=False)
     start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False, index=True)
     # native_enum=False: renders as VARCHAR, not a Postgres native enum type.
     # Postgres native enums need ALTER TYPE ... ADD VALUE to grow, which this
     # project's ADD-COLUMN-only migration system (migrations.py) can't do -
@@ -121,15 +126,15 @@ class Auction(Base):
     # the VARCHAR from whatever members exist when the table is first
     # created, and this same migration system has no ALTER COLUMN TYPE step
     # to widen it later if a longer member gets added.
-    status = Column(Enum(AuctionStatus, native_enum=False, length=50), default=AuctionStatus.under_review, nullable=False)
+    status = Column(Enum(AuctionStatus, native_enum=False, length=50), default=AuctionStatus.under_review, nullable=False, index=True)
     winner_user_id = Column(String, ForeignKey("users.id"), nullable=True)
     is_featured = Column(Boolean, default=False)
     listing_fee = Column(Float, nullable=True)  # fee charged to seller for posting
     lot_code = Column(String, unique=True, nullable=True)
-    participation_credit_cost = Column(Float, nullable=True)  # falls back to PlatformSettings.default_participation_credit_cost
+    participation_credit_cost = Column(Float, nullable=True, index=True)  # falls back to PlatformSettings.default_participation_credit_cost
     review_notes = Column(Text, nullable=True)  # admin's "changes requested" feedback (doc §11.5)
     contact_flagged = Column(Boolean, default=False, nullable=False)  # title/description looked like it leaks direct contact (doc §11.6)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
 
     # Vehicle-specific fields (nullable)
     brand = Column(String, nullable=True)

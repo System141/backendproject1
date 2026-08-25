@@ -111,6 +111,22 @@ MISSING_UNIQUE_INDEXES = [
     ("credit_purchases", "stripe_session_id", "uq_credit_purchases_stripe_session_id"),
 ]
 
+# Plain (non-unique) indexes, same deal: new tables get these natively from
+# domain.py's index=True, this list is only for tables that already existed
+# before those columns gained index=True. Names match SQLAlchemy's default
+# ix_<table>_<column> so a later create_all() on a fresh DB can't collide.
+# All six back app/api/auctions.py's list_auctions - the query behind every
+# auctions.html load, chip click, filter apply and sort change.
+MISSING_INDEXES = [
+    ("auctions", "seller_id", "ix_auctions_seller_id"),
+    ("auctions", "category_id", "ix_auctions_category_id"),
+    ("auctions", "status", "ix_auctions_status"),
+    ("auctions", "end_time", "ix_auctions_end_time"),
+    ("auctions", "created_at", "ix_auctions_created_at"),
+    ("auctions", "current_price", "ix_auctions_current_price"),
+    ("auctions", "participation_credit_cost", "ix_auctions_participation_credit_cost"),
+]
+
 
 async def run_migration_async(conn):
     """Add missing columns using async connection. Safe for repeated runs."""
@@ -137,6 +153,13 @@ async def run_migration_async(conn):
             logger.info(f"Migration: added unique index {index_name}")
         except Exception as e:
             logger.warning(f"Migration: skipped unique index {index_name} ({e})")
+    for table, col_name, index_name in MISSING_INDEXES:
+        try:
+            sql = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
+            await conn.execute(sql)
+            logger.info(f"Migration: added index {index_name}")
+        except Exception as e:
+            logger.warning(f"Migration: skipped index {index_name} ({e})")
 
 
 async def run_migration_raw(db_session):
@@ -170,3 +193,12 @@ async def run_migration_raw(db_session):
         except Exception as e:
             await db_session.rollback()
             logger.warning(f"Migration: skipped unique index {index_name} ({e})")
+    for table, col_name, index_name in MISSING_INDEXES:
+        try:
+            sql = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
+            await db_session.execute(sql)
+            await db_session.commit()
+            logger.info(f"Migration: added index {index_name}")
+        except Exception as e:
+            await db_session.rollback()
+            logger.warning(f"Migration: skipped index {index_name} ({e})")

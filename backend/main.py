@@ -15,6 +15,7 @@ from app.core.database import engine, Base, get_db, AsyncSessionLocal
 from app.core.scheduler import run_scheduler
 from app.core.migrations import run_migration_async
 from app.core.category_seed import seed_default_categories
+from app.core.credit_package_seed import seed_default_credit_packages
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import Depends
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
     logger.info("Tables created, migrations complete.")
     async with AsyncSessionLocal() as seed_db:
         await seed_default_categories(seed_db)
+        await seed_default_credit_packages(seed_db)
     # Start background scheduler for auto-finalize
     scheduler_task = asyncio.create_task(run_scheduler())
     await manager.start_heartbeat()

@@ -1336,6 +1336,12 @@
       if (priceSpan) priceSpan.textContent = pkg.credits + " credits";
       var buyBtn = node.querySelector("a.btn");
       if (buyBtn && token()) {
+        // Baked markup labels this "Get started" -> auth.html#create (the
+        // right CTA for a logged-out visitor). Once logged in, relabel it
+        // to an actual buy action so the button doesn't just silently
+        // change behavior under unchanged "Get started" text.
+        buyBtn.setAttribute("data-i18n", "buy_credits_now");
+        buyBtn.textContent = window.t ? window.t("buy_credits_now") : "Buy credits now";
         buyBtn.setAttribute("href", "#");
         buyBtn.addEventListener("click", function (e) {
           e.preventDefault();

@@ -1295,6 +1295,18 @@
     if (!confirm("By purchasing you accept the BidMont Credit Terms & Refund Policy. Continue to secure payment?")) return;
     api("/credits/monri/checkout", { method: "POST", body: { package_id: packageId, terms_accepted: true } })
       .then(function (data) {
+        if (data.simulate) {
+          // PAYMENTS_SIMULATE=true server-side: no live Monri gateway, used
+          // to exercise the full purchase flow on a running site for testing.
+          if (!confirm("TEST MODE: no live payment gateway is configured. Simulate a successful purchase of " + data.credits + " credits (" + data.package_name + ")? No real charge will occur.")) return;
+          api("/credits/simulate/complete", { method: "POST", body: { purchase_id: data.purchase_id, approved: true } })
+            .then(function () {
+              banner("TEST MODE: " + data.credits + " credits added (simulated payment, nothing was charged).");
+              setTimeout(function () { location.reload(); }, 900);
+            })
+            .catch(function (err) { banner(err.message, "error"); });
+          return;
+        }
         var form = document.createElement("form");
         form.method = "POST";
         form.action = data.checkout_url;

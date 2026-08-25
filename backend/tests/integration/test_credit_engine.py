@@ -318,6 +318,90 @@ class TestCreditCheckoutTermsAcceptance:
         assert len(result.scalars().all()) == 1
 
 
+class TestCreditPurchaseSimulateMode:
+    """PAYMENTS_SIMULATE lets credit purchases complete without a real Monri
+    round-trip, for live/manual testing. Must default off (existing 503
+    behavior unchanged), must 404 the complete-endpoint when off (doesn't
+    reveal itself), and must not let one user complete another's purchase."""
+
+    async def test_disabled_by_default_checkout_still_503s(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, monkeypatch,
+    ):
+        monkeypatch.delenv("PAYMENTS_SIMULATE", raising=False)
+        monkeypatch.delenv("MONRI_MERCHANT_KEY", raising=False)
+        monkeypatch.delenv("MONRI_AUTHENTICITY_TOKEN", raising=False)
+
+        pkg = CreditPackage(id=str(uuid.uuid4()), name="Starter", credits=100.0, price_eur=10.0, active=True)
+        db_session.add(pkg)
+        await db_session.commit()
+
+        resp = await async_client.post(
+            "/api/credits/monri/checkout", json={"package_id": pkg.id, "terms_accepted": True}, headers=_headers(test_user),
+        )
+        assert resp.status_code == 503
+
+    async def test_simulate_checkout_and_complete_credits_ledger(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, monkeypatch,
+    ):
+        monkeypatch.setenv("PAYMENTS_SIMULATE", "true")
+        monkeypatch.delenv("MONRI_MERCHANT_KEY", raising=False)
+        monkeypatch.delenv("MONRI_AUTHENTICITY_TOKEN", raising=False)
+
+        pkg = CreditPackage(id=str(uuid.uuid4()), name="Starter", credits=100.0, price_eur=10.0, active=True)
+        db_session.add(pkg)
+        await db_session.commit()
+        headers = _headers(test_user)
+
+        checkout = await async_client.post(
+            "/api/credits/monri/checkout", json={"package_id": pkg.id, "terms_accepted": True}, headers=headers,
+        )
+        assert checkout.status_code == 200
+        data = checkout.json()
+        assert data["simulate"] is True
+        assert data["credits"] == 100.0
+
+        complete = await async_client.post(
+            "/api/credits/simulate/complete",
+            json={"purchase_id": data["purchase_id"], "approved": True},
+            headers=headers,
+        )
+        assert complete.status_code == 200
+        assert complete.json()["status"] == "ok"
+
+        await db_session.refresh(test_user)
+        assert test_user.credits_balance == 100.0
+        result = await db_session.execute(select(CreditPurchase).where(CreditPurchase.id == data["purchase_id"]))
+        assert result.scalars().first().status == PaymentStatus.completed
+
+    async def test_simulate_complete_endpoint_hidden_when_disabled(
+        self, async_client: AsyncClient, test_user: User, monkeypatch,
+    ):
+        monkeypatch.delenv("PAYMENTS_SIMULATE", raising=False)
+        resp = await async_client.post(
+            "/api/credits/simulate/complete", json={"purchase_id": "whatever"}, headers=_headers(test_user),
+        )
+        assert resp.status_code == 404
+
+    async def test_simulate_complete_rejects_other_users_purchase(
+        self, async_client: AsyncClient, db_session: AsyncSession, test_user: User, seller_user: User, monkeypatch,
+    ):
+        monkeypatch.setenv("PAYMENTS_SIMULATE", "true")
+        purchase = CreditPurchase(
+            id=str(uuid.uuid4()), user_id=test_user.id, credits_amount=50.0, amount_eur=5.0,
+            stripe_session_id="order-sim-1", status=PaymentStatus.pending,
+        )
+        db_session.add(purchase)
+        await db_session.commit()
+
+        resp = await async_client.post(
+            "/api/credits/simulate/complete", json={"purchase_id": purchase.id}, headers=_headers(seller_user),
+        )
+        assert resp.status_code == 404
+
+        await db_session.refresh(test_user)
+        assert test_user.credits_balance == 0.0
+
+
 class TestFinalizeTieBreak:
     async def test_earlier_bid_wins_tie(
         self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User, seller_headers: dict, test_category: Category,

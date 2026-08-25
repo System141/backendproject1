@@ -175,7 +175,7 @@ def footer():
 {cols}
 </div>
 <div class="ftr__bar">
-<p data-i18n="ftr_copyright">&copy; 2024 BidMont. Sva prava zadržana.</p>
+<p data-i18n="ftr_copyright">© 2024 BidMont. Sva prava zadržana.</p>
 <div class="ftr__locale">
 <label class="select"><span class="sr-only" data-i18n="ftr_lang_label">Jezik</span><select id="lang-select"><option value="me">Crnogorski</option><option value="en">English</option></select></label>
 <label class="select"><span class="sr-only" data-i18n="ftr_currency_label">Valuta</span><select><option>EUR (€)</option><option>USD ($)</option><option>TRY (₺)</option></select></label>

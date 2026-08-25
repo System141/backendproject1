@@ -114,7 +114,10 @@ async def create_monri_credit_checkout(
         raise HTTPException(503, "Monri not configured. Set MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN.")
 
     purchase_id = str(uuid.uuid4())
-    order_number = f"cred-{purchase_id[:8]}-{int(_time.time())}"
+    # sim- prefix permanently marks simulated rows so they can never be
+    # mistaken for real revenue later (e.g. if this ever runs against a
+    # production-like DB) - Monri's own dashboard has no record of them.
+    order_number = f"{'sim-' if simulate else ''}cred-{purchase_id[:8]}-{int(_time.time())}"
     amount_cents = int(round(pkg.price_eur * 100))
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8000")
 

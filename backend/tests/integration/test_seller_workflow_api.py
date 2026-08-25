@@ -145,6 +145,31 @@ class TestSellerApplication:
         assert resp.json()["verification_status"] == "rejected"
         assert resp.json()["rejection_reason"] == "Missing supporting documents"
 
+    async def test_admin_can_revoke_an_already_verified_seller(
+        self, async_client: AsyncClient, test_user: User, auth_headers: dict, admin_headers: dict, test_category: Category
+    ):
+        """Verification used to be one-way (reject 400'd on an already-verified
+        profile) - with admin_update_user_role now auto-verifying on promotion
+        too, admins need a way to undo a verified profile, not just a pending one."""
+        await async_client.post("/api/sellers/apply", json={"account_type": "individual"}, headers=auth_headers)
+        me = await async_client.get("/api/sellers/me", headers=auth_headers)
+        profile_id = me.json()["id"]
+        verify_resp = await async_client.post(f"/api/admin/sellers/{profile_id}/verify", headers=admin_headers)
+        assert verify_resp.status_code == 200
+
+        revoke_resp = await async_client.post(
+            f"/api/admin/sellers/{profile_id}/reject", json={"reason": "Granted in error"}, headers=admin_headers
+        )
+        assert revoke_resp.status_code == 200
+        assert revoke_resp.json()["verification_status"] == "rejected"
+        assert revoke_resp.json()["rejection_reason"] == "Granted in error"
+
+        # and selling rights are actually pulled, not just the profile flag
+        create_resp = await async_client.post(
+            "/api/auctions", json=_listing_payload(test_category.id), headers=auth_headers
+        )
+        assert create_resp.status_code == 403
+
     async def test_reapply_after_rejection_allowed(
         self, async_client: AsyncClient, auth_headers: dict, admin_headers: dict
     ):

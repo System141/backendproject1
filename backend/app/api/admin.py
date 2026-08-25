@@ -645,13 +645,14 @@ async def admin_reject_seller(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Reject a seller application. Reason is mandatory and audit-logged."""
+    """Reject a seller application, or revoke an already-verified one (e.g. a
+    user promoted straight to seller via admin_update_user_role, or a
+    verified seller who needs their selling rights pulled). Reason is
+    mandatory and audit-logged either way."""
     result = await db.execute(select(SellerProfile).where(SellerProfile.id == profile_id))
     profile = result.scalars().first()
     if not profile:
         raise HTTPException(status_code=404, detail="Seller application not found")
-    if profile.verification_status == SellerVerificationStatus.verified:
-        raise HTTPException(status_code=400, detail="Already verified - cannot reject")
 
     profile.verification_status = SellerVerificationStatus.rejected
     profile.rejection_reason = req.reason

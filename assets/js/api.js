@@ -19,13 +19,26 @@
     var headers = { "Content-Type": "application/json" };
     var t = token();
     if (t) headers.Authorization = "Bearer " + t;
+    // ponytail: no request-level retry/queue, just a hard ceiling so a dropped
+    // connection or slow query shows "failed to load" instead of spinning forever
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 20000);
     return fetch(API_BASE + path, {
       method: opts.method || "GET",
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
-    }).then(function (res) {
+      signal: controller.signal,
+    }).catch(function (err) {
+      if (err.name === "AbortError") throw new Error("Request timed out. Check your connection and try again.");
+      throw err;
+    }).finally(function () { clearTimeout(timer); }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok) {
+          if (res.status === 401 && t) {
+            // stale/expired token still in storage — clear it and bounce to login once
+            setSession(null, null);
+            if (!/\/auth\.html$/.test(location.pathname)) location.href = "auth.html";
+          }
           var err = new Error(data.detail || res.statusText);
           err.status = res.status; // callers branch on 403 (not joined) vs 402 (insufficient credits)
           throw err;
@@ -896,7 +909,7 @@
           var listingsBtn = document.getElementById("tab-listings");
           if (listingsBtn) listingsBtn.click();
         }
-      }).catch(function () {});
+      }).catch(function (err) { console.error("account init failed:", err); });
 
       api("/credits/balance").then(function (d) {
         var el = document.getElementById("acct-balance");
@@ -1551,6 +1564,10 @@
         var actions = p.verification_status === "pending"
           ? '<button class="btn btn--outline btn--sm" type="button" data-verify-seller="' + p.id + '">Verify</button> ' +
             '<button class="btn btn--ghostred btn--sm" type="button" data-reject-seller="' + p.id + '">Reject</button>'
+          : p.verification_status === "verified"
+          // covers profiles auto-verified by admin_update_user_role (the
+          // Users-tab role editor), not just the apply -> verify flow.
+          ? '<button class="btn btn--ghostred btn--sm" type="button" data-reject-seller="' + p.id + '">Revoke</button>'
           : (p.rejection_reason ? '<span class="tiny" style="color:#9f1239">' + escHtml(p.rejection_reason) + "</span>" : "");
         return "<tr><td>" + applicantLabel(p.user_id) + "</td><td>" + escHtml(p.account_type) +
           (p.company_name ? " — " + escHtml(p.company_name) : "") + "</td><td>" + escHtml(p.city || "—") + "</td><td>" +

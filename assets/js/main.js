@@ -112,7 +112,7 @@
       var show = input.type === "password";
       input.type = show ? "text" : "password";
       btn.setAttribute("aria-pressed", show ? "true" : "false");
-      btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      btn.setAttribute("aria-label", window.t ? window.t(show ? "hide_password" : "show_password") : (show ? "Hide password" : "Show password"));
     });
   });
 
@@ -196,8 +196,9 @@
       if (form.getAttribute("data-form") === "signup") goStep(2);
       else {
         var btn = form.querySelector('button[type="submit"]');
-        btn.textContent = "Logging in…";
-        setTimeout(function () { btn.textContent = "Log in"; }, 1400);
+        var loginLabel = window.t ? window.t("hdr_login") : "Log in";
+        btn.textContent = window.t ? window.t("logging_in") : "Logging in…";
+        setTimeout(function () { btn.textContent = loginLabel; }, 1400);
       }
     });
     $$("input, select", form).forEach(function (input) {
@@ -216,7 +217,7 @@
     var tick = function () {
       timers.forEach(function (el, n) {
         var s = Math.max(0, Math.floor((ends[n] - Date.now()) / 1000));
-        if (!s) { el.textContent = "Ended"; return; }
+        if (!s) { el.textContent = window.t ? window.t("ended") : "Ended"; return; }
         var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
             m = Math.floor(s % 3600 / 60), sec = s % 60;
         el.textContent = d ? pad(d) + "d " + pad(h) + "h " + pad(m) + "m"

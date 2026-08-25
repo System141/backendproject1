@@ -12,7 +12,18 @@
   function setSession(accessToken, user) {
     if (accessToken) localStorage.setItem(TOKEN_KEY, accessToken); else localStorage.removeItem(TOKEN_KEY);
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user)); else localStorage.removeItem(USER_KEY);
+    // Keep User.preferred_language (already used to pick email language, see
+    // notifications.py) in step with whatever the site is set to - best
+    // effort, never blocks login/signup on it. Also synced live on toggle,
+    // see the bidmont:langchange listener below.
+    if (accessToken) {
+      api("/users/me", { method: "PUT", body: { preferred_language: localStorage.getItem("lang") === "en" ? "en" : "me" } }).catch(function () {});
+    }
   }
+
+  document.addEventListener("bidmont:langchange", function (e) {
+    if (token()) api("/users/me", { method: "PUT", body: { preferred_language: e.detail.lang } }).catch(function () {});
+  });
 
   function api(path, opts) {
     opts = opts || {};
@@ -332,12 +343,15 @@
     });
   }
 
+  // Keyed by <option value> (build.py's sort-select/sb-category/chip markup),
+  // not by visible label text - the labels are translated per assets/js/i18n.js
+  // and can no longer double as lookup keys (see the chip/select handlers below).
   var SORT_OPTIONS = {
-    "ending soonest": { sort_by: "end_time", sort_dir: "asc" },
-    "newly listed": { sort_by: "created_at", sort_dir: "desc" },
-    "price: low to high": { sort_by: "current_price", sort_dir: "asc" },
-    "price: high to low": { sort_by: "current_price", sort_dir: "desc" },
-    "fewest credits": { sort_by: "participation_credit_cost", sort_dir: "asc" },
+    "end_time_asc": { sort_by: "end_time", sort_dir: "asc" },
+    "created_at_desc": { sort_by: "created_at", sort_dir: "desc" },
+    "price_asc": { sort_by: "current_price", sort_dir: "asc" },
+    "price_desc": { sort_by: "current_price", sort_dir: "desc" },
+    "credits_asc": { sort_by: "participation_credit_cost", sort_dir: "asc" },
   };
 
   function wireAuctionListings() {
@@ -372,7 +386,10 @@
           .then(function (r) {
             renderAuctionGrid(".grid-auctions", r.items, categoriesById);
             var countEl = document.querySelector(".count");
-            if (countEl) countEl.textContent = r.total + " results found";
+            // "Label: N" avoids Slavic plural-agreement rules ("1 rezultat" vs
+            // "2 rezultata" vs "5 rezultata") that a template string can't get
+            // right for every N - see results_label in assets/js/i18n.js.
+            if (countEl) countEl.textContent = (window.t ? window.t("results_label") : "Results found") + ": " + r.total;
             var loadMoreBtn = document.querySelector("[data-load-more]");
             if (loadMoreBtn) loadMoreBtn.style.display = (r.items.length >= r.total || state.limit >= 100) ? "none" : "";
           })
@@ -385,12 +402,17 @@
         refreshGrid();
       }
 
+      // data-cat carries the canonical English category name (build.py bakes
+      // it separately from the translated visible label - see i18n.js) so
+      // this keeps matching the live category_id no matter which language
+      // is on screen. "" is the "all categories" sentinel, same convention
+      // sb-category/sb-location's own value="" option already uses below.
       var chipsWrap = document.querySelector("#categories.chips");
       if (chipsWrap) {
         chipsWrap.querySelectorAll(".chip").forEach(function (chip) {
           chip.addEventListener("click", function () {
-            var label = chip.textContent.trim().toLowerCase();
-            setCategory(label === "all categories" ? null : (idByName[label] || null));
+            var cat = (chip.getAttribute("data-cat") || "").toLowerCase();
+            setCategory(cat === "" ? null : (idByName[cat] || null));
           });
         });
       }
@@ -410,8 +432,8 @@
       var sbCategory = document.getElementById("sb-category");
       if (sbCategory) {
         sbCategory.addEventListener("change", function () {
-          var label = sbCategory.value.trim().toLowerCase();
-          setCategory(label === "all categories" ? null : (idByName[label] || null));
+          var val = sbCategory.value.trim().toLowerCase();
+          setCategory(val === "" ? null : (idByName[val] || null));
         });
       }
 
@@ -427,7 +449,7 @@
       var sortSelect = document.getElementById("sort-select");
       if (sortSelect) {
         sortSelect.addEventListener("change", function () {
-          var opt = SORT_OPTIONS[sortSelect.value.trim().toLowerCase()];
+          var opt = SORT_OPTIONS[sortSelect.value.trim()];
           if (!opt) return;
           state.sort_by = opt.sort_by;
           state.sort_dir = opt.sort_dir;
@@ -479,9 +501,9 @@
         btn.addEventListener("click", function () {
           state = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
           if (searchInput) searchInput.value = "";
-          if (sbCategory) sbCategory.value = "All categories";
+          if (sbCategory) sbCategory.value = "";
           if (sbLocation) sbLocation.value = "";
-          if (sortSelect) sortSelect.value = "Ending soonest";
+          if (sortSelect) sortSelect.selectedIndex = 0;
           // main.js's own reset handler (registered first) already unchecked every
           // box; re-check "All locations" (value="") so the visible state matches
           // the cleared filter instead of showing nothing selected.

@@ -25,7 +25,10 @@ from app.models.domain import Category
 
 logger = logging.getLogger("bidmont.category_seed")
 
-# Must match the CHIPS list in build.py (auctions.html filter chips) by name.
+# Must match the CHIPS list in build.py (auctions.html filter chips) by name -
+# specifically their data-cat attribute, which stays English/untranslated on
+# purpose so assets/js/api.js can match a chip click to this category
+# regardless of the site's current language (see assets/js/i18n.js).
 TOP_LEVEL = [
     "Cars", "Heavy Equipment", "Real Estate", "Marine",
     "Luxury", "Industrial Machinery", "Electronics", "Trucks",

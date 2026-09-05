@@ -574,6 +574,7 @@
 
     var ws = null, wsTimer = null, wsDelay = 1000;
     var galleryUrls = [], galleryIndex = 0;
+    var galleryObjectUrls = [];
 
     function showNotFound() {
       root.classList.add("is-hidden");
@@ -581,10 +582,31 @@
       if (nf) nf.style.display = "grid";
     }
 
+    function revokeGalleryObjectUrls() {
+      galleryObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+      galleryObjectUrls = [];
+    }
+
+    function setMediaSource(img, url) {
+      if (!img) return;
+      if (!/^\/api\/uploads\//.test(url)) { img.src = url; return; }
+      fetch(url, { headers: token() ? { Authorization: "Bearer " + token() } : {} })
+        .then(function (res) {
+          if (!res.ok) throw new Error("Could not load image");
+          return res.blob();
+        })
+        .then(function (blob) {
+          var objectUrl = URL.createObjectURL(blob);
+          galleryObjectUrls.push(objectUrl);
+          img.src = objectUrl;
+        })
+        .catch(function () { img.removeAttribute("src"); });
+    }
+
     function showImage(idx) {
       galleryIndex = idx;
       var mainImg = document.getElementById("det-image");
-      if (mainImg) mainImg.src = galleryUrls[idx];
+      setMediaSource(mainImg, galleryUrls[idx]);
       document.querySelectorAll("#det-thumbs img").forEach(function (t, n) {
         t.classList.toggle("is-active", n === idx);
       });
@@ -594,7 +616,7 @@
       var lb = document.getElementById("det-lightbox");
       var img = document.getElementById("det-lightbox-img");
       if (!lb || !img) return;
-      img.src = galleryUrls[idx];
+      setMediaSource(img, galleryUrls[idx]);
       lb.dataset.i = idx;
       lb.classList.add("is-open");
     }
@@ -642,6 +664,7 @@
 
       var images = (a.images || []).filter(function (im) { return im.media_type !== "document"; })
         .sort(function (x, y) { return x.sort_order - y.sort_order; });
+      revokeGalleryObjectUrls();
       galleryUrls = images.length ? images.map(function (im) { return im.image_url; })
         : ["assets/img/" + pickImage(catName) + ".webp"];
       var thumbsEl = document.getElementById("det-thumbs");
@@ -650,7 +673,7 @@
         if (galleryUrls.length > 1) {
           galleryUrls.forEach(function (url, n) {
             var t = document.createElement("img");
-            t.src = url; t.alt = "";
+            setMediaSource(t, url); t.alt = "";
             t.addEventListener("click", function () { showImage(n); });
             thumbsEl.appendChild(t);
           });

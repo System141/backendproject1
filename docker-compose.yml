@@ -41,6 +41,7 @@ services:
         condition: service_healthy
     volumes:
       - bidmont-uploads:/app/backend/uploads
+      - bidmont-private-uploads:/app/backend/private_uploads
     restart: unless-stopped
     networks:
       - default
@@ -49,6 +50,7 @@ services:
 volumes:
   bidmont-pgdata:
   bidmont-uploads:
+  bidmont-private-uploads:
 
 networks:
   default: {}

@@ -14,7 +14,10 @@ from app.core.security import get_current_user
 from app.models.domain import SellerProfile, SellerVerificationStatus, User
 from app.schemas.seller import SellerApplicationRequest, SellerProfileResponse
 from app.services.notifications import send_notification, NotificationType
-from app.api.uploads import ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE, PRIVATE_UPLOAD_DIR, _write_file
+from app.api.uploads import (
+    ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE, PRIVATE_UPLOAD_DIR,
+    _copy_upload_file, _remove_file, _safe_storage_path,
+)
 
 sellers_router = APIRouter(prefix="/api/sellers", tags=["sellers"])
 
@@ -122,16 +125,21 @@ async def upload_verification_document(
             status_code=400,
             detail=f"Invalid file type: {file.content_type}. Allowed: {', '.join(ALLOWED_DOCUMENT_TYPES)}",
         )
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
-
     filename = f"{uuid.uuid4().hex}.{ext}"
-    await asyncio.to_thread(_write_file, os.path.join(PRIVATE_UPLOAD_DIR, filename), content)
+    filepath = os.path.join(PRIVATE_UPLOAD_DIR, filename)
+    try:
+        await asyncio.to_thread(_copy_upload_file, file.file, filepath, MAX_FILE_SIZE)
+    except ValueError:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10 MB.")
 
     profile.verification_document = filename
-    await db.commit()
-    await db.refresh(profile)
+    try:
+        await db.commit()
+        await db.refresh(profile)
+    except Exception:
+        await db.rollback()
+        await asyncio.to_thread(_remove_file, filepath)
+        raise
     return profile
 
 
@@ -152,7 +160,10 @@ async def download_verification_document(
     if not is_staff and current_user.id != profile.user_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this document")
 
-    filepath = os.path.join(PRIVATE_UPLOAD_DIR, profile.verification_document)
+    try:
+        filepath = _safe_storage_path(profile.verification_document, PRIVATE_UPLOAD_DIR)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="File missing on disk")
     if not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="File missing on disk")
     return FileResponse(filepath, filename=os.path.basename(filepath))

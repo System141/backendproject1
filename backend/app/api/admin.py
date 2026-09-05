@@ -119,7 +119,7 @@ async def seed_admin(
     )
     await db.commit()
 
-    access_token = create_access_token(data={"sub": admin_id, "role": "admin"})
+    access_token = create_access_token(data={"sub": admin_id, "role": "admin", "ver": 0})
 
     return TokenResponse(
         access_token=access_token,

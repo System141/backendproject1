@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.domain import Auction, AuctionStatus, Category, User
 
 
-async def _make_auction(db_session: AsyncSession, seller: User, category: Category) -> Auction:
+async def _make_auction(
+    db_session: AsyncSession, seller: User, category: Category, status: AuctionStatus = AuctionStatus.live,
+) -> Auction:
     auction = Auction(
         id=str(uuid.uuid4()),
         seller_id=seller.id,
@@ -20,7 +22,7 @@ async def _make_auction(db_session: AsyncSession, seller: User, category: Catego
         min_increment=10.0,
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(days=3),
-        status=AuctionStatus.live,
+        status=status,
     )
     db_session.add(auction)
     await db_session.commit()
@@ -62,6 +64,17 @@ class TestWatchlist:
     async def test_add_nonexistent_auction_404(self, async_client: AsyncClient, auth_headers: dict):
         resp = await async_client.post(f"/api/watchlist/{uuid.uuid4()}", headers=auth_headers)
         assert resp.status_code == 404
+
+    async def test_unpublished_auction_is_not_listed(
+        self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User,
+        auth_headers: dict, test_category: Category,
+    ):
+        auction = await _make_auction(db_session, seller_user, test_category, AuctionStatus.under_review)
+        assert (await async_client.post(f"/api/watchlist/{auction.id}", headers=auth_headers)).status_code == 204
+
+        response = await async_client.get("/api/watchlist", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json() == []
 
 
 class TestLegalDocuments:

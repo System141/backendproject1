@@ -231,6 +231,30 @@ class TestListAuctions:
         assert "Active Auction" in titles
         assert "Pending Auction" not in titles
 
+        status_filtered = await async_client.get("/api/auctions?status=under_review")
+        assert status_filtered.status_code == 200
+        assert status_filtered.json() == []
+
+        invalid_status = await async_client.get("/api/auctions?status=not-a-status")
+        assert invalid_status.status_code == 422
+
+    async def test_public_response_does_not_include_review_notes(
+        self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User, test_category: Category,
+    ):
+        auction = Auction(
+            id=str(uuid.uuid4()), seller_id=seller_user.id, category_id=test_category.id,
+            title="Published Auction", description="Published without internal notes", start_price=100.0,
+            current_price=100.0, min_increment=10.0, start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc) + timedelta(days=3), status=AuctionStatus.live,
+            review_notes="Internal moderation note",
+        )
+        db_session.add(auction)
+        await db_session.commit()
+
+        response = await async_client.get(f"/api/auctions/{auction.id}")
+        assert response.status_code == 200
+        assert response.json()["review_notes"] is None
+
     async def test_total_count_header(
         self, async_client: AsyncClient, db_session: AsyncSession, seller_user: User, test_category: Category
     ):

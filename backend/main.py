@@ -41,6 +41,83 @@ UPLOAD_DIR = os.path.join(
 )
 
 
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
+class RequestBodyLimitMiddleware:
+    """Reject oversized upload bodies before Starlette parses multipart data."""
+
+    LIMITS = (
+        ("/api/auctions/bulk-import", 3 * 1024 * 1024),
+        ("/api/uploads/batch", 52 * 1024 * 1024),
+        ("/api/uploads/documents", 52 * 1024 * 1024),
+        ("/api/uploads", 12 * 1024 * 1024),
+        ("/api/sellers/me/verification-document", 12 * 1024 * 1024),
+    )
+
+    def __init__(self, app):
+        self.app = app
+
+    @classmethod
+    def limit_for(cls, path: str) -> int | None:
+        for prefix, limit in cls.LIMITS:
+            if path == prefix or path.startswith(prefix + "?"):
+                return limit
+        return None
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        limit = self.limit_for(scope["path"])
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+
+        content_length = next(
+            (value for key, value in scope.get("headers", []) if key.lower() == b"content-length"),
+            None,
+        )
+        if content_length is not None:
+            try:
+                if int(content_length) > limit:
+                    await self._send_rejection(send)
+                    return
+            except ValueError:
+                pass
+
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    await self._send_rejection(send)
+                    raise _RequestBodyTooLarge
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _RequestBodyTooLarge:
+            return
+
+    @staticmethod
+    async def _send_rejection(send):
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [(b"content-type", b"application/json")],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b'{"detail":"Request body too large"}',
+        })
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: create tables
@@ -70,6 +147,8 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
+
+app.add_middleware(RequestBodyLimitMiddleware)
 
 # Register rate-limit error handler
 app.state.limiter = limiter
@@ -141,9 +220,8 @@ app.include_router(watchlist_router)
 app.include_router(legal_router)
 app.include_router(sellers_router)
 
-# Mount static files for uploads (before SPA catch-all)
+# Uploads are served only through the authorization-aware media endpoint.
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # Mount the site's own asset bundle (css/js/img) - also before the catch-all
 SITE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -182,7 +260,7 @@ SITE_FILES = {
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     # Don't intercept API routes
-    if full_path.startswith("api/"):
+    if full_path.startswith("api/") or full_path == "uploads" or full_path.startswith("uploads/"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
     filename = full_path if full_path in SITE_FILES else "index.html"

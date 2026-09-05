@@ -1,13 +1,14 @@
 import asyncio
 import os
 import uuid
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.domain import User, Auction, AuctionImage
+from app.models.domain import User, Auction, AuctionImage, PUBLIC_AUCTION_STATUSES
 from app.schemas.auction import AuctionImageResponse
 from app.core.security import get_current_user, get_current_user_optional
 from app.services.auctions import build_auction_image_response
@@ -21,6 +22,9 @@ ALLOWED_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 ALLOWED_DOCUMENT_TYPES = {**ALLOWED_TYPES, "application/pdf": "pdf"}
 DOCUMENT_CATEGORIES = {"registration", "inspection", "service", "other"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_BATCH_FILES = 10
+MAX_BATCH_CONTENT = 50 * 1024 * 1024
+MAX_CSV_CONTENT = 2 * 1024 * 1024
 
 # Upload directory (local storage for MVP) - publicly servable via the
 # `/uploads` static mount in main.py.
@@ -30,9 +34,44 @@ UPLOAD_DIR = os.path.join(
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-def _write_file(filepath: str, content: bytes) -> None:
-    with open(filepath, "wb") as f:
-        f.write(content)
+def _copy_upload_file(source, filepath: str, max_size: int) -> int:
+    """Copy a parsed upload in bounded chunks and publish it atomically."""
+    temporary = f"{filepath}.part"
+    total = 0
+    try:
+        with open(temporary, "wb") as target:
+            while chunk := source.read(64 * 1024):
+                total += len(chunk)
+                if total > max_size:
+                    raise ValueError("file too large")
+                target.write(chunk)
+        os.replace(temporary, filepath)
+        return total
+    except Exception:
+        try:
+            os.remove(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _remove_file(filepath: str) -> None:
+    try:
+        os.remove(filepath)
+    except FileNotFoundError:
+        pass
+
+
+def _safe_storage_path(storage_ref: str, root: str) -> str:
+    """Resolve a flat storage key and reject path traversal or absolute paths."""
+    name = os.path.basename(storage_ref or "")
+    if not name or (storage_ref != name and storage_ref != f"/uploads/{name}"):
+        raise ValueError("invalid storage reference")
+    root_path = Path(root).resolve()
+    candidate = (root_path / name).resolve()
+    if candidate.parent != root_path:
+        raise ValueError("invalid storage reference")
+    return str(candidate)
 
 # Doc §6.2: private documents must never be reachable by a guessed/reused
 # direct URL, so they live outside the publicly-mounted UPLOAD_DIR entirely -
@@ -59,15 +98,17 @@ async def _get_owned_auction_or_404(db: AsyncSession, auction_id: str, current_u
 )
 async def upload_image(
     file: UploadFile = File(...),
-    auction_id: str | None = None,
+    auction_id: str = Query(...),
     sort_order: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Upload an image file. Optionally associate with an auction_id.
+    Upload an image file associated with the owner's auction.
     Only the auction owner (seller) can upload images to their auction.
     """
+    auction = await _get_owned_auction_or_404(db, auction_id, current_user)
+
     # Validate file type
     ext = ALLOWED_TYPES.get(file.content_type)
     if not ext:
@@ -76,57 +117,29 @@ async def upload_image(
             detail=f"Invalid file type: {file.content_type}. Allowed: {', '.join(ALLOWED_TYPES)}",
         )
 
-    # Read file content
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File too large. Maximum size is 10 MB.",
-        )
-
-    # If auction_id is provided, verify it exists and user owns it
-    if auction_id:
-        result = await db.execute(
-            select(Auction).where(Auction.id == auction_id)
-        )
-        auction = result.scalars().first()
-        if not auction:
-            raise HTTPException(status_code=404, detail="Auction not found")
-        if auction.seller_id != current_user.id:
-            raise HTTPException(
-                status_code=403,
-                detail="You can only upload images to your own auctions",
-            )
-
     # Generate unique filename — ext from validated MIME type, never from filename
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
     # Save to disk (off the event loop - sync file I/O would otherwise
     # stall every other request on this single-process app, CLAUDE.md)
-    await asyncio.to_thread(_write_file, filepath, content)
+    try:
+        await asyncio.to_thread(_copy_upload_file, file.file, filepath, MAX_FILE_SIZE)
+    except ValueError:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10 MB.")
 
-    image_url = f"/uploads/{filename}"
-
-    # Save to database only if auction_id provided
-    if auction_id:
-        img_record = AuctionImage(
-            id=str(uuid.uuid4()),
-            auction_id=auction_id,
-            image_url=image_url,
-            sort_order=sort_order,
-        )
-        db.add(img_record)
+    img_record = AuctionImage(
+        id=str(uuid.uuid4()), auction_id=auction.id, image_url=f"/uploads/{filename}", sort_order=sort_order,
+    )
+    db.add(img_record)
+    try:
         await db.commit()
         await db.refresh(img_record)
-        return build_auction_image_response(img_record)
-
-    # Return without database record (standalone upload)
-    return AuctionImageResponse(
-        id="",
-        image_url=image_url,
-        sort_order=sort_order,
-    )
+    except Exception:
+        await db.rollback()
+        await asyncio.to_thread(_remove_file, filepath)
+        raise
+    return build_auction_image_response(img_record)
 
 
 @uploads_router.post(
@@ -146,24 +159,42 @@ async def upload_images_batch(
     """
     auction = await _get_owned_auction_or_404(db, auction_id, current_user)
 
+    if len(files) > MAX_BATCH_FILES:
+        raise HTTPException(status_code=413, detail=f"A maximum of {MAX_BATCH_FILES} files is allowed")
+    if any(ALLOWED_TYPES.get(file.content_type) is None for file in files):
+        raise HTTPException(status_code=400, detail="All files must be JPEG, PNG, or WebP")
+
     saved_images = []
+    saved_paths = []
+    total_size = 0
     for sort_idx, file in enumerate(files):
         # Validate file type
-        ext = ALLOWED_TYPES.get(file.content_type)
-        if not ext:
-            continue  # Skip invalid files silently
-
-        # Read file content
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE:
-            continue  # Skip oversized files silently
+        ext = ALLOWED_TYPES[file.content_type]
 
         # ext from validated MIME type, never from filename
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
 
-        # Save to disk (off the event loop, see single-upload endpoint above)
-        await asyncio.to_thread(_write_file, filepath, content)
+        # Save to disk in bounded chunks (off the event loop).
+        try:
+            size = await asyncio.to_thread(_copy_upload_file, file.file, filepath, MAX_FILE_SIZE)
+        except ValueError:
+            for path in saved_paths:
+                await asyncio.to_thread(_remove_file, path)
+            await db.rollback()
+            raise HTTPException(status_code=413, detail="Each file may be at most 10 MB")
+        except Exception:
+            for path in saved_paths:
+                await asyncio.to_thread(_remove_file, path)
+            await db.rollback()
+            raise
+        total_size += size
+        if total_size > MAX_BATCH_CONTENT:
+            for path in saved_paths + [filepath]:
+                await asyncio.to_thread(_remove_file, path)
+            await db.rollback()
+            raise HTTPException(status_code=413, detail="Total upload content may be at most 50 MB")
+        saved_paths.append(filepath)
 
         image_url = f"/uploads/{filename}"
 
@@ -177,7 +208,13 @@ async def upload_images_batch(
         db.add(img_record)
         saved_images.append(img_record)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        for path in saved_paths:
+            await asyncio.to_thread(_remove_file, path)
+        raise
 
     # Refresh all saved images
     for img in saved_images:
@@ -210,9 +247,12 @@ async def upload_documents_batch(
         )
     auction = await _get_owned_auction_or_404(db, auction_id, current_user)
 
+    if len(files) > MAX_BATCH_FILES:
+        raise HTTPException(status_code=413, detail=f"A maximum of {MAX_BATCH_FILES} files is allowed")
+
     # Validate every file up front - fail the whole batch on the first bad
     # file rather than partially saving some and rejecting others.
-    contents = []
+    extensions = []
     for file in files:
         ext = ALLOWED_DOCUMENT_TYPES.get(file.content_type)
         if not ext:
@@ -220,19 +260,23 @@ async def upload_documents_batch(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid file type for '{file.filename}': {file.content_type}. Allowed: {', '.join(ALLOWED_DOCUMENT_TYPES)}",
             )
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"'{file.filename}' is too large. Maximum size is 10 MB.",
-            )
-        contents.append((content, ext))
+        extensions.append(ext)
 
     saved_images = []
-    for sort_idx, (content, ext) in enumerate(contents):
+    saved_paths = []
+    total_size = 0
+    try:
+      for sort_idx, (file, ext) in enumerate(zip(files, extensions)):
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(PRIVATE_UPLOAD_DIR, filename)
-        await asyncio.to_thread(_write_file, filepath, content)
+        try:
+            size = await asyncio.to_thread(_copy_upload_file, file.file, filepath, MAX_FILE_SIZE)
+        except ValueError:
+            raise HTTPException(status_code=413, detail=f"'{file.filename}' is too large. Maximum size is 10 MB.")
+        saved_paths.append(filepath)
+        total_size += size
+        if total_size > MAX_BATCH_CONTENT:
+            raise HTTPException(status_code=413, detail="Total upload content may be at most 50 MB")
 
         img_record = AuctionImage(
             id=str(uuid.uuid4()),
@@ -246,7 +290,12 @@ async def upload_documents_batch(
         db.add(img_record)
         saved_images.append(img_record)
 
-    await db.commit()
+      await db.commit()
+    except Exception:
+        await db.rollback()
+        for path in saved_paths:
+            await asyncio.to_thread(_remove_file, path)
+        raise
     for img in saved_images:
         await db.refresh(img)
 
@@ -264,20 +313,29 @@ async def download_file(
     private ones require the auction's own seller or staff/admin."""
     result = await db.execute(select(AuctionImage).where(AuctionImage.id == image_id))
     img = result.scalars().first()
-    if not img or img.media_type != "document":
-        raise HTTPException(status_code=404, detail="Document not found")
+    if not img:
+        raise HTTPException(status_code=404, detail="Media not found")
 
+    auction_result = await db.execute(select(Auction).where(Auction.id == img.auction_id))
+    auction = auction_result.scalars().first()
+    is_staff = viewer is not None and viewer.get("role") in ("admin", "super_admin", "support")
+    is_owner = auction is not None and viewer is not None and viewer.get("sub") == auction.seller_id
+    if auction is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if auction.status not in PUBLIC_AUCTION_STATUSES and not (is_staff or is_owner):
+        raise HTTPException(status_code=404, detail="Document not found")
     if img.visibility == "private":
         if viewer is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        auction_result = await db.execute(select(Auction).where(Auction.id == img.auction_id))
-        auction = auction_result.scalars().first()
-        is_staff = viewer.get("role") in ("admin", "super_admin", "support")
-        is_owner = auction is not None and viewer.get("sub") == auction.seller_id
         if not (is_staff or is_owner):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this document")
 
-    filepath = os.path.join(PRIVATE_UPLOAD_DIR, img.image_url)
+    root = PRIVATE_UPLOAD_DIR if img.media_type == "document" else UPLOAD_DIR
+    try:
+        filepath = _safe_storage_path(img.image_url, root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Media not found")
     if not os.path.isfile(filepath):
-        raise HTTPException(status_code=404, detail="File missing on disk")
-    return FileResponse(filepath, filename=os.path.basename(filepath))
+        raise HTTPException(status_code=404, detail="Media missing on disk")
+    headers = {"Cache-Control": "private, no-store"} if img.visibility == "private" else {}
+    return FileResponse(filepath, filename=os.path.basename(filepath), headers=headers)

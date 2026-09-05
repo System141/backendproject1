@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.domain import Watchlist, Auction, User
+from app.models.domain import Watchlist, Auction, User, PUBLIC_AUCTION_STATUSES
 from app.schemas.auction import AuctionResponse
 from app.services.auctions import build_auction_response
 
@@ -25,7 +25,10 @@ async def list_watchlist(
         select(Auction)
         .join(Watchlist, Watchlist.auction_id == Auction.id)
         .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
-        .where(Watchlist.user_id == current_user.id)
+        .where(
+            Watchlist.user_id == current_user.id,
+            Auction.status.in_(PUBLIC_AUCTION_STATUSES),
+        )
     )
     return [build_auction_response(a) for a in result.scalars().all()]
 

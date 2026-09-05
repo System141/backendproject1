@@ -17,6 +17,7 @@ from app.core.security import (
     decode_access_token,
     get_current_user,
     verify_totp,
+    PUBLIC_REGISTRATION_ROLES,
 )
 from app.models.domain import User, UserRole, _utcnow
 from app.schemas.auth import (
@@ -107,11 +108,14 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
                 detail="An account with this phone number already exists.",
             )
 
-    # Validate role
-    try:
-        role = UserRole(req.role)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}")
+    # Keep a server-side guard in addition to request-model validation. This
+    # protects direct callers and makes the privilege boundary explicit.
+    if req.role not in PUBLIC_REGISTRATION_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Role is not available for public registration.",
+        )
+    role = UserRole(req.role)
 
     # Create user
     user = User(
@@ -136,7 +140,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
     verification_token = await _issue_verification_email(db, user)
 
     # Generate JWT
-    access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
+    access_token = create_access_token(data={"sub": user.id, "role": user.role.value, "ver": user.auth_version})
 
     return TokenResponse(
         access_token=access_token,
@@ -176,7 +180,7 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
             raise HTTPException(status_code=401, detail="Invalid TOTP code")
 
     # Generate JWT
-    access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
+    access_token = create_access_token(data={"sub": user.id, "role": user.role.value, "ver": user.auth_version})
 
     return TokenResponse(access_token=access_token, user=_user_response(user))
 
@@ -186,7 +190,7 @@ async def refresh_token(
     current_user: User = Depends(get_current_user),
 ):
     """Refresh access token. Requires a valid (not expired) token."""
-    new_token = create_access_token(data={"sub": current_user.id, "role": current_user.role.value})
+    new_token = create_access_token(data={"sub": current_user.id, "role": current_user.role.value, "ver": current_user.auth_version})
     return TokenResponse(access_token=new_token, user=_user_response(current_user))
 
 
@@ -241,9 +245,13 @@ async def reset_password(request: Request, req: PasswordResetConfirm, db: AsyncS
 
     # Update password
     user.password_hash = await asyncio.to_thread(hash_password, req.new_password)
+    user.auth_version = (user.auth_version or 0) + 1
     user.reset_token_hash = None
     user.reset_token_expires_at = None
     await db.commit()
+
+    from app.api.ws import manager
+    await manager.disconnect_user(user.id)
 
     return {"message": "Password reset successfully."}
 

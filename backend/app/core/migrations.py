@@ -21,6 +21,7 @@ MISSING_COLUMNS = {
         ("city", "VARCHAR"),
         ("address", "VARCHAR"),
         ("preferred_language", "VARCHAR"),
+        ("auth_version", "INTEGER NOT NULL DEFAULT 0"),
         ("credits_balance", "FLOAT DEFAULT 0"),
         ("totp_secret", "VARCHAR"),
         ("totp_enabled", "BOOLEAN DEFAULT FALSE"),

@@ -28,6 +28,14 @@ JWT_EXPIRATION_HOURS = 24
 
 security_scheme = HTTPBearer(auto_error=False)
 
+# Roles that may be selected during public self-registration. Staff roles are
+# granted only by an authenticated administrative workflow.
+PUBLIC_REGISTRATION_ROLES = frozenset({
+    UserRole.buyer.value,
+    UserRole.seller.value,
+    UserRole.corporate_seller.value,
+})
+
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
@@ -87,6 +95,9 @@ def totp_otpauth_url(secret_b32: str, account_email: str, issuer: str = "BidMont
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
+    # Keep helper-created tokens compatible with users created before the
+    # version field existed; callers issuing user tokens pass the DB value.
+    to_encode.setdefault("ver", 0)
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=JWT_EXPIRATION_HOURS))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -118,14 +129,15 @@ async def get_current_user(
             detail="Invalid or expired token",
         )
     user_id = payload.get("sub")
-    if user_id is None:
+    token_version = payload.get("ver")
+    if user_id is None or token_version is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
-    if user is None or user.status != "active":
+    if user is None or user.status != "active" or user.auth_version != token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
@@ -150,11 +162,12 @@ async def get_current_user_optional(
     if payload is None:
         return None
     user_id = payload.get("sub")
-    if user_id is None:
+    token_version = payload.get("ver")
+    if user_id is None or token_version is None:
         return None
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
-    if user is None or user.status != "active":
+    if user is None or user.status != "active" or user.auth_version != token_version:
         return None
     payload["role"] = user.role.value if hasattr(user.role, "value") else str(user.role)
     return payload

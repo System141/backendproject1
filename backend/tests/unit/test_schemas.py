@@ -79,7 +79,7 @@ class TestRegisterRequest:
             )
 
     def test_valid_roles_accepted(self):
-        for role in ("buyer", "seller", "corporate_seller", "admin"):
+        for role in ("buyer", "seller", "corporate_seller"):
             req = RegisterRequest(
                 name="Test",
                 email=f"test_{role}@example.com",
@@ -87,6 +87,16 @@ class TestRegisterRequest:
                 role=role,
             )
             assert req.role == role
+
+    def test_staff_roles_rejected(self):
+        for role in ("admin", "super_admin", "support", "ADMIN"):
+            with pytest.raises(ValidationError):
+                RegisterRequest(
+                    name="Test",
+                    email=f"test_{role.lower()}@example.com",
+                    password="password123",
+                    role=role,
+                )
 
     def test_optional_phone(self):
         req = RegisterRequest(

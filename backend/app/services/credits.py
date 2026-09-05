@@ -5,6 +5,7 @@ Every change (purchase, join-auction spend, admin adjustment, reversal) goes
 through apply_ledger_entry so credits_balance stays a reconstructible cache
 of the CreditLedger, the same way current_price is a cache of valid Bids.
 """
+import math
 import uuid
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -29,11 +30,25 @@ async def apply_ledger_entry(
     negative. Does not commit - the caller commits as part of its own
     transaction (e.g. alongside an AuctionParticipant insert).
     """
-    result = await db.execute(select(User).where(User.id == user.id).with_for_update())
+    if user is None or not getattr(user, "id", None):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not isinstance(delta, (int, float)) or not math.isfinite(delta):
+        raise HTTPException(status_code=400, detail="Credit amount must be finite")
+
+    result = await db.execute(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     locked_user = result.scalars().first()
+    if locked_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
 
     balance_before = locked_user.credits_balance or 0.0
     balance_after = balance_before + delta
+    if not math.isfinite(balance_before) or not math.isfinite(balance_after):
+        raise HTTPException(status_code=400, detail="Credit balance must be finite")
     if balance_after < 0:
         raise HTTPException(status_code=402, detail="Insufficient credit balance")
 

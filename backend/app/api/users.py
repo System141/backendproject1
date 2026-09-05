@@ -69,7 +69,10 @@ async def change_password(
     if not await asyncio.to_thread(verify_password, req.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.password_hash = await asyncio.to_thread(hash_password, req.new_password)
+    current_user.auth_version = (current_user.auth_version or 0) + 1
     await db.commit()
+    from app.api.ws import manager
+    await manager.disconnect_user(current_user.id)
     return {"status": "ok"}
 
 

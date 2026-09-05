@@ -7,8 +7,8 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.domain import Auction, AuctionStatus, BIDDABLE_STATUSES, AuctionParticipant, Bid, CreditLedgerType, User, UserRole, to_naive_utc
+from app.core.security import get_current_user, get_current_user_optional
+from app.models.domain import Auction, AuctionStatus, PUBLIC_AUCTION_STATUSES, BIDDABLE_STATUSES, AuctionParticipant, Bid, CreditLedgerType, User, UserRole, to_naive_utc
 from app.schemas.bid import BidCreateRequest, BidResponse, BidHistoryResponse, JoinAuctionResponse
 from app.api.ws import manager
 from app.api.auth import limiter
@@ -309,12 +309,19 @@ async def get_bid_history(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    viewer: dict | None = Depends(get_current_user_optional),
 ):
     """Get bid history for an auction, ordered by amount descending. Invalidated bids are hidden."""
     # Verify auction exists
     result = await db.execute(select(Auction).where(Auction.id == auction_id))
     auction = result.scalars().first()
     if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    viewer_user_id = viewer.get("sub") if viewer else None
+    viewer_is_staff = viewer is not None and viewer.get("role") in ("admin", "super_admin", "support")
+    if auction.status not in PUBLIC_AUCTION_STATUSES and not (
+        viewer_is_staff or viewer_user_id == auction.seller_id
+    ):
         raise HTTPException(status_code=404, detail="Auction not found")
 
     # Count total using SQL COUNT instead of loading all rows

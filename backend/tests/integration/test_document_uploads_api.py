@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.domain import Category, User
+from app.models.domain import AuctionImage, Category, User
+from sqlalchemy import select
 
 PDF_BYTES = b"%PDF-1.4\n%fake pdf content for tests\n"
 
@@ -100,10 +101,10 @@ class TestDocumentVisibility:
         )
 
         anon = await async_client.get(f"/api/auctions/{auction_id}")
-        assert anon.json()["images"] == []
+        assert anon.status_code == 404
 
         other_user = await async_client.get(f"/api/auctions/{auction_id}", headers=auth_headers)
-        assert other_user.json()["images"] == []
+        assert other_user.status_code == 404
 
         owner = await async_client.get(f"/api/auctions/{auction_id}", headers=seller_headers)
         assert len(owner.json()["images"]) == 1
@@ -138,7 +139,7 @@ class TestDocumentVisibility:
         assert toggle.json()["visibility"] == "public"
 
         other_user = await async_client.get(f"/api/auctions/{auction_id}", headers=auth_headers)
-        assert len(other_user.json()["images"]) == 1
+        assert other_user.status_code == 404
 
     async def test_non_admin_cannot_toggle_visibility(
         self, async_client: AsyncClient, seller_headers: dict, test_category: Category,
@@ -157,6 +158,34 @@ class TestDocumentVisibility:
 
 
 class TestSecureDownload:
+    async def test_photo_uses_authorized_media_route_not_legacy_static_url(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        seller_headers: dict,
+        admin_headers: dict,
+        test_category: Category,
+    ):
+        auction_id = await _create_auction(async_client, seller_headers, test_category)
+        upload = await async_client.post(
+            f"/api/uploads?auction_id={auction_id}",
+            files=[("file", ("car.png", b"png-bytes", "image/png"))],
+            headers=seller_headers,
+        )
+        assert upload.status_code == 201
+        media_url = upload.json()["image_url"]
+        image = (await db_session.execute(select(AuctionImage))).scalars().first()
+        assert image is not None
+
+        assert (await async_client.get(image.image_url)).status_code == 404
+        assert (await async_client.get(media_url)).status_code == 404
+
+        publish = await async_client.post(f"/api/auctions/{auction_id}/approve", headers=admin_headers)
+        assert publish.status_code == 200
+        public_media = await async_client.get(media_url)
+        assert public_media.status_code == 200
+        assert public_media.content == b"png-bytes"
+
     async def test_owner_can_download_private_document(
         self, async_client: AsyncClient, seller_headers: dict, test_category: Category
     ):
@@ -182,7 +211,7 @@ class TestSecureDownload:
         )
         image_id = upload.json()[0]["id"]
         response = await async_client.get(f"/api/uploads/{image_id}/download")
-        assert response.status_code == 401
+        assert response.status_code == 404
 
     async def test_other_user_cannot_download_private_document(
         self, async_client: AsyncClient, seller_headers: dict, test_category: Category, auth_headers: dict
@@ -195,7 +224,7 @@ class TestSecureDownload:
         )
         image_id = upload.json()[0]["id"]
         response = await async_client.get(f"/api/uploads/{image_id}/download", headers=auth_headers)
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     async def test_anonymous_can_download_public_document(
         self, async_client: AsyncClient, seller_headers: dict, test_category: Category, admin_headers: dict
@@ -208,6 +237,8 @@ class TestSecureDownload:
         )
         image_id = upload.json()[0]["id"]
         await async_client.put(f"/api/admin/auction-images/{image_id}/visibility?visibility=public", headers=admin_headers)
+        publish = await async_client.post(f"/api/auctions/{auction_id}/approve", headers=admin_headers)
+        assert publish.status_code == 200
 
         response = await async_client.get(f"/api/uploads/{image_id}/download")
         assert response.status_code == 200

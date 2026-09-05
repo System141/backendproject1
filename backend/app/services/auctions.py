@@ -282,8 +282,8 @@ async def finalize_auction(
     }
 
 
-def build_auction_response(auction: Auction) -> AuctionResponse:
-    """Build an AuctionResponse from an Auction ORM instance."""
+def build_auction_response(auction: Auction, *, include_review_notes: bool = False) -> AuctionResponse:
+    """Build an AuctionResponse without leaking internal review feedback."""
     return AuctionResponse(
         id=auction.id,
         seller_id=auction.seller_id,
@@ -302,7 +302,7 @@ def build_auction_response(auction: Auction) -> AuctionResponse:
         is_featured=bool(auction.is_featured) if auction.is_featured is not None else False,
         lot_code=auction.lot_code,
         participation_credit_cost=auction.participation_credit_cost,
-        review_notes=auction.review_notes,
+        review_notes=auction.review_notes if include_review_notes else None,
         contact_flagged=bool(auction.contact_flagged),
         created_at=auction.created_at,
         brand=auction.brand,
@@ -341,7 +341,7 @@ def build_auction_image_response(img: AuctionImage) -> AuctionImageResponse:
     directly-servable `/uploads/...` URL unchanged; only documents get their
     `image_url` rewritten to route through the authorizing download endpoint.
     """
-    image_url = f"/api/uploads/{img.id}/download" if img.media_type == "document" else img.image_url
+    image_url = f"/api/uploads/{img.id}/download"
     return AuctionImageResponse(
         id=img.id, image_url=image_url, sort_order=img.sort_order,
         media_type=img.media_type, doc_category=img.doc_category, visibility=img.visibility,

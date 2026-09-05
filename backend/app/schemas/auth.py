@@ -1,15 +1,24 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional
+
+from app.core.security import PUBLIC_REGISTRATION_ROLES
 
 class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: str = Field(..., pattern=r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
     phone: Optional[str] = Field(None, max_length=20)
     password: str = Field(..., min_length=6, max_length=128)
-    role: str = Field(default="buyer", pattern=r"^(buyer|seller|corporate_seller|admin)$")
+    role: str = Field(default="buyer")
     accepted_terms: bool = Field(default=False)
     accepted_privacy: bool = Field(default=False)
     marketing_consent: bool = Field(default=False)
+
+    @field_validator("role")
+    @classmethod
+    def validate_registration_role(cls, role: str) -> str:
+        if role not in PUBLIC_REGISTRATION_ROLES:
+            raise ValueError("Role is not available for public registration")
+        return role
 
 class LoginRequest(BaseModel):
     email: str

@@ -12,10 +12,11 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_seller, get_current_admin, get_current_user_optional
 from app.models.domain import (
-    Auction, AuctionStatus, AuctionImage, AuctionParticipant, Bid, Category, User, UserRole, NotificationType,
-    SellerProfile, SellerVerificationStatus, TermsAcceptance, _utcnow, to_naive_utc,
+    Auction, AuctionStatus, AuctionImage, AuctionParticipant, Bid, Category, User, UserRole, CreditLedgerType, NotificationType,
+    SellerProfile, SellerVerificationStatus, TermsAcceptance, PUBLIC_AUCTION_STATUSES, _utcnow, to_naive_utc,
 )
 from app.services.notifications import send_notification
+from app.services.credits import apply_ledger_entry
 from app.services.auctions import (
     build_auction_response, build_auction_image_response, visible_auction_images,
     generate_lot_code, looks_like_direct_contact, get_or_create_seller_declaration,
@@ -35,6 +36,7 @@ from app.schemas.credit import ReasonRequest
 from app.schemas.category import CategoryResponse
 
 auctions_router = APIRouter(prefix="/api/auctions", tags=["auctions"])
+MAX_CSV_CONTENT = 2 * 1024 * 1024
 
 
 # ---------- Helper: fetch auction with seller check ----------
@@ -93,11 +95,14 @@ async def create_auction(
         raise HTTPException(status_code=400, detail="End time must be in the future")
 
     listing_fee = float(os.getenv("LISTING_FEE_CREDITS", "10"))
-    if (current_user.credits_balance or 0.0) < listing_fee:
-        raise HTTPException(status_code=402, detail="Insufficient credits to post a listing")
-    current_user.credits_balance = (current_user.credits_balance or 0.0) - listing_fee
-
     auction_id = str(uuid.uuid4())
+    await apply_ledger_entry(
+        db,
+        current_user,
+        -listing_fee,
+        CreditLedgerType.listing_spend,
+        reference=auction_id,
+    )
     lot_code = await generate_lot_code(db, category)
 
     auction = Auction(
@@ -172,12 +177,19 @@ async def bulk_import_auctions(
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a .csv file")
     try:
-        text = (await file.read()).decode("utf-8-sig")
+        raw = await file.read(MAX_CSV_CONTENT + 1)
+        if len(raw) > MAX_CSV_CONTENT:
+            raise HTTPException(status_code=413, detail="CSV content may be at most 2 MB")
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
 
+    rows = list(csv.DictReader(io.StringIO(text)))
+    if len(rows) > 1000:
+        raise HTTPException(status_code=413, detail="CSV may contain at most 1,000 rows")
+
     results = []
-    for row_num, row in enumerate(csv.DictReader(io.StringIO(text)), start=2):  # row 1 is the header
+    for row_num, row in enumerate(rows, start=2):  # row 1 is the header
         cleaned = {k: (v.strip() or None if isinstance(v, str) else v) for k, v in row.items()}
         try:
             req = AuctionCreateRequest(**cleaned)
@@ -236,13 +248,15 @@ async def list_auctions(
 
     if category_id:
         query = query.where(Auction.category_id == category_id)
+    # A public status filter can only narrow the public state set. Private
+    # states never become enumerable by passing them as a query parameter.
+    query = query.where(Auction.status.in_(PUBLIC_AUCTION_STATUSES))
     if status:
-        query = query.where(Auction.status == AuctionStatus(status))
-    else:
-        # Default: only show publicly-relevant states (never draft/under_review/cancelled)
-        query = query.where(Auction.status.in_(
-            [AuctionStatus.upcoming, AuctionStatus.live, AuctionStatus.extended, AuctionStatus.ended]
-        ))
+        try:
+            requested_status = AuctionStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid auction status")
+        query = query.where(Auction.status == requested_status)
     if search:
         pattern = f"%{search}%"
         query = query.where(
@@ -350,7 +364,7 @@ async def my_auctions(
         .order_by(desc(Auction.created_at))
     )
     auctions = result.scalars().all()
-    return [_build_auction_response(a) for a in auctions]
+    return [build_auction_response(a, include_review_notes=True) for a in auctions]
 
 
 @auctions_router.get("/joined", response_model=list[JoinedAuctionResponse])
@@ -408,6 +422,12 @@ async def get_auction(
     or staff/admin, never for anyone else (including anonymous visitors)."""
     auction = await _get_auction_or_404(db, auction_id)
 
+    viewer_user_id = viewer.get("sub") if viewer else None
+    viewer_is_staff = viewer is not None and viewer.get("role") in ("admin", "super_admin", "support")
+    viewer_is_owner = viewer_user_id == auction.seller_id
+    if auction.status not in PUBLIC_AUCTION_STATUSES and not (viewer_is_owner or viewer_is_staff):
+        raise HTTPException(status_code=404, detail="Auction not found")
+
     # Fetch category
     category = None
     cat_result = await db.execute(select(Category).where(Category.id == auction.category_id))
@@ -415,14 +435,15 @@ async def get_auction(
     if cat_obj:
         category = CategoryBrief(id=cat_obj.id, name=cat_obj.name, slug=cat_obj.slug)
 
-    viewer_user_id = viewer.get("sub") if viewer else None
-    viewer_is_staff = viewer is not None and viewer.get("role") in ("admin", "super_admin", "support")
     images = [
         build_auction_image_response(img)
         for img in visible_auction_images(auction, viewer_user_id, viewer_is_staff)
     ]
 
-    base = _build_auction_response(auction)
+    base = build_auction_response(
+        auction,
+        include_review_notes=viewer_is_owner or viewer_is_staff,
+    )
     return AuctionDetailResponse(
         **base.model_dump(),
         images=images,
@@ -458,7 +479,7 @@ async def update_auction(
     await db.commit()
     auction = await _get_auction_or_404(db, auction_id)
 
-    return _build_auction_response(auction)
+    return build_auction_response(auction, include_review_notes=True)
 
 
 # ========== SUBMIT (seller, resubmit after changes requested) ==========
@@ -479,7 +500,7 @@ async def submit_auction(
     auction.status = AuctionStatus.under_review
     await db.commit()
     auction = await _get_auction_or_404(db, auction_id)
-    return _build_auction_response(auction)
+    return build_auction_response(auction, include_review_notes=True)
 
 
 # ========== DELETE (seller, only if pending) ==========
@@ -532,7 +553,7 @@ async def approve_auction(
         template_vars={"auction_title": auction.title},
     )
 
-    return _build_auction_response(auction)
+    return build_auction_response(auction, include_review_notes=True)
 
 
 # ========== REQUEST CHANGES (admin) ==========
@@ -570,7 +591,7 @@ async def request_auction_changes(
         template_vars={"auction_title": auction.title, "reason": req.reason},
     )
 
-    return _build_auction_response(auction)
+    return build_auction_response(auction, include_review_notes=True)
 
 
 # ========== CONTACT UNLOCK (post-close, doc §12.5/§5.11 - AC-11/AC-12) ==========
@@ -638,4 +659,4 @@ async def reject_auction(
         template_vars={"auction_title": auction.title},
     )
 
-    return _build_auction_response(auction)
+    return build_auction_response(auction, include_review_notes=True)

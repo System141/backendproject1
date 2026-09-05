@@ -8,8 +8,12 @@ Design (ponytail: simplest approach):
 """
 import json
 import asyncio
+from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 from app.core.security import decode_access_token
+from app.core.database import AsyncSessionLocal
+from app.models.domain import User
 
 AUTH_TIMEOUT_SECONDS = 5
 
@@ -20,45 +24,91 @@ class ConnectionManager:
     def __init__(self):
         # auction_id -> dict of {websocket: user_id}
         self.active_connections: dict[str, dict[str, set[WebSocket]]] = {}
+        self.connection_metadata: dict[WebSocket, tuple[str, int, int]] = {}
         self._heartbeat_task: asyncio.Task | None = None
 
     async def _heartbeat(self):
         """Periodically ping all connections to detect stale ones."""
         while True:
             await asyncio.sleep(30)
+            now = int(datetime.now(timezone.utc).timestamp())
             for auction_id, rooms in list(self.active_connections.items()):
+                connections = rooms.get("connections", set())
+                user_ids = {
+                    self.connection_metadata[ws][0]
+                    for ws in connections
+                    if ws in self.connection_metadata
+                }
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(User.id, User.auth_version, User.status).where(User.id.in_(user_ids))
+                    )
+                    users = {row.id: row for row in result.all()}
                 stale = set()
-                for ws in rooms.get("connections", set()):
+                for ws in list(connections):
+                    metadata = self.connection_metadata.get(ws)
+                    user = users.get(metadata[0]) if metadata else None
+                    invalid = (
+                        metadata is None
+                        or metadata[2] <= now
+                        or user is None
+                        or user.status != "active"
+                        or user.auth_version != metadata[1]
+                    )
                     try:
-                        await ws.send_json({"type": "ping"})
+                        if invalid:
+                            await ws.close(code=4003, reason="Session expired")
+                        else:
+                            await ws.send_json({"type": "ping"})
                     except Exception:
+                        pass
+                    if invalid:
                         stale.add(ws)
                 for ws in stale:
                     rooms["connections"].discard(ws)
+                    self.connection_metadata.pop(ws, None)
                 if not rooms["connections"]:
-                    del self.active_connections[auction_id]
+                    self.active_connections.pop(auction_id, None)
 
     async def start_heartbeat(self):
         if self._heartbeat_task is None:
             self._heartbeat_task = asyncio.create_task(self._heartbeat())
 
-    async def connect(self, websocket: WebSocket, auction_id: str, user_id: str):
+    async def connect(self, websocket: WebSocket, auction_id: str, user_id: str, auth_version: int, expires_at: int):
         # Caller (auction_websocket) already accepted the socket - it has to,
         # to receive the first-message auth payload before this is called.
         if auction_id not in self.active_connections:
             self.active_connections[auction_id] = {"connections": set(), "user_ids": set()}
         self.active_connections[auction_id]["connections"].add(websocket)
         self.active_connections[auction_id]["user_ids"].add(user_id)
+        self.connection_metadata[websocket] = (user_id, auth_version, expires_at)
         await self._broadcast_user_count(auction_id)
 
     def disconnect(self, websocket: WebSocket, auction_id: str):
         room = self.active_connections.get(auction_id)
         if room:
             room["connections"].discard(websocket)
+            metadata = self.connection_metadata.pop(websocket, None)
+            if metadata:
+                room["user_ids"].discard(metadata[0])
             if not room["connections"]:
-                del self.active_connections[auction_id]
+                self.active_connections.pop(auction_id, None)
             else:
                 asyncio.create_task(self._broadcast_user_count(auction_id))
+
+    async def disconnect_user(self, user_id: str):
+        """Close all sockets for a user after an authentication change."""
+        for auction_id, room in list(self.active_connections.items()):
+            targets = [
+                ws for ws in list(room["connections"])
+                if self.connection_metadata.get(ws, (None, 0, 0))[0] == user_id
+            ]
+            for ws in targets:
+                try:
+                    await ws.close(code=4003, reason="Session revoked")
+                except Exception:
+                    pass
+                self.disconnect(ws, auction_id)
 
     async def _broadcast_user_count(self, auction_id: str):
         room = self.active_connections.get(auction_id)
@@ -82,8 +132,9 @@ class ConnectionManager:
                 stale.add(ws)
         for ws in stale:
             room["connections"].discard(ws)
+            self.connection_metadata.pop(ws, None)
         if not room["connections"]:
-            del self.active_connections[auction_id]
+            self.active_connections.pop(auction_id, None)
 
     def get_online_count(self, auction_id: str) -> int:
         room = self.active_connections.get(auction_id)
@@ -121,11 +172,20 @@ async def auction_websocket(
         return
 
     user_id = payload.get("sub")
-    if not user_id:
+    token_version = payload.get("ver")
+    expires_at = payload.get("exp")
+    if not user_id or token_version is None or not isinstance(expires_at, int):
         await websocket.close(code=4001, reason="Invalid token payload")
         return
 
-    await manager.connect(websocket, auction_id, user_id)
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
+    if user is None or user.status != "active" or user.auth_version != token_version:
+        await websocket.close(code=4003, reason="Session revoked")
+        return
+
+    await manager.connect(websocket, auction_id, user_id, token_version, expires_at)
 
     try:
         # Send initial connection confirmation with online count

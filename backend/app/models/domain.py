@@ -39,6 +39,14 @@ class AuctionStatus(str, enum.Enum):
 # Statuses in which an auction is open for join/bid (live bidding window)
 BIDDABLE_STATUSES = (AuctionStatus.live, AuctionStatus.extended)
 
+# Only these states are visible through anonymous/public auction surfaces.
+PUBLIC_AUCTION_STATUSES = (
+    AuctionStatus.upcoming,
+    AuctionStatus.live,
+    AuctionStatus.extended,
+    AuctionStatus.ended,
+)
+
 
 def generate_uuid():
     return str(uuid.uuid4())
@@ -71,6 +79,7 @@ class User(Base):
     address = Column(String, nullable=True)
     preferred_language = Column(String, nullable=True)  # "me" or "en" (doc §10.6/§16.3); None = no preference set
     password_hash = Column(String, nullable=False)
+    auth_version = Column(Integer, nullable=False, default=0, server_default="0")
     role = Column(Enum(UserRole, native_enum=False, length=50), default=UserRole.buyer)  # see AuctionStatus.status for why native_enum=False
     status = Column(String, default="active")
     accepted_terms = Column(Boolean, default=False, nullable=False)
@@ -296,6 +305,7 @@ class CreditPackage(Base):
 
 class CreditLedgerType(str, enum.Enum):
     purchase = "purchase"
+    listing_spend = "listing_spend"
     join_spend = "join_spend"
     admin_adjust = "admin_adjust"
     reversal = "reversal"

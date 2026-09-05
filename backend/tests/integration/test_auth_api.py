@@ -3,11 +3,12 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.domain import User, UserRole
-from app.core.security import hash_password, create_access_token
+from app.core.security import hash_password, create_access_token, JWT_ALGORITHM, JWT_SECRET
 
 
 class TestRegister:
@@ -72,10 +73,26 @@ class TestRegister:
         assert "phone" in response.json()["detail"].lower()
 
     async def test_invalid_role(self, async_client: AsyncClient, test_user_data: dict):
-        """Invalid role should return 400."""
+        """Invalid role should return 422 before user creation."""
         test_user_data["role"] = "superadmin"
         response = await async_client.post("/api/auth/register", json=test_user_data)
-        assert response.status_code in (400, 422)
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize("role", ["admin", "super_admin", "support", "ADMIN"])
+    async def test_staff_roles_cannot_register(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        test_user_data: dict,
+        role: str,
+    ):
+        test_user_data["role"] = role
+        response = await async_client.post("/api/auth/register", json=test_user_data)
+
+        assert response.status_code == 422
+        result = await db_session.execute(select(User).where(User.email == test_user_data["email"]))
+        assert result.scalars().first() is None
+        assert "access_token" not in response.json()
 
     async def test_create_seller_account(self, async_client: AsyncClient, test_user_data: dict):
         """Register as seller should succeed."""
@@ -359,6 +376,19 @@ class TestGetMe:
         response = await async_client.get("/api/users/me", headers=headers)
         assert response.status_code == 401
 
+    async def test_versionless_token_is_rejected(
+        self, async_client: AsyncClient, test_user: User,
+    ):
+        token = jwt.encode(
+            {"sub": test_user.id, "role": "buyer", "exp": 4102444800},
+            JWT_SECRET,
+            algorithm=JWT_ALGORITHM,
+        )
+        response = await async_client.get(
+            "/api/users/me", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 401
+
 
 class TestUpdateMe:
     async def test_update_name(
@@ -415,3 +445,22 @@ class TestUpdateMe:
             json={},
         )
         assert response.status_code == 200
+
+    async def test_password_change_invalidates_existing_token(
+        self, async_client: AsyncClient, auth_headers: dict, test_user: User,
+    ):
+        response = await async_client.put(
+            "/api/users/me/password",
+            headers=auth_headers,
+            json={"current_password": "TestPass123!", "new_password": "NewPass456!"},
+        )
+        assert response.status_code == 200
+
+        old_token_response = await async_client.get("/api/users/me", headers=auth_headers)
+        assert old_token_response.status_code == 401
+
+        login_response = await async_client.post(
+            "/api/auth/login",
+            json={"email": test_user.email, "password": "NewPass456!"},
+        )
+        assert login_response.status_code == 200

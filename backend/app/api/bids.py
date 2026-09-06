@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -15,6 +15,7 @@ from app.api.auth import limiter
 from app.services.notifications import send_notification, NotificationType
 from app.services.auctions import finalize_auction, get_bid_increment, get_or_create_settings, anonymize_bidder
 from app.services.credits import apply_ledger_entry
+from app.services.pagination import page_query
 
 bids_router = APIRouter(prefix="/api/auctions", tags=["bids"])
 
@@ -232,7 +233,7 @@ async def place_bid(
     prev_bid_result = await db.execute(
         select(Bid)
         .where(Bid.auction_id == auction_id, Bid.user_id != current_user.id, Bid.invalidated == False)  # noqa: E712
-        .order_by(desc(Bid.amount))
+        .order_by(desc(Bid.amount), Bid.created_at, Bid.id)
         .limit(1)
     )
     previous_highest_bidder = prev_bid_result.scalars().first()
@@ -333,7 +334,7 @@ async def get_bid_history(
     query = (
         select(Bid)
         .where(Bid.auction_id == auction_id, Bid.invalidated == False)  # noqa: E712
-        .order_by(desc(Bid.amount))
+        .order_by(desc(Bid.amount), Bid.created_at, Bid.id)
         .offset(offset)
         .limit(limit)
     )
@@ -407,15 +408,18 @@ async def finalize_auction_endpoint(
 # ========== MY BIDS ==========
 @bids_router.get("/bids/my", response_model=list[BidResponse])
 async def my_bids(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List current user's bids across all auctions."""
-    result = await db.execute(
+    result = await page_query(db,
         select(Bid)
         .options(selectinload(Bid.auction))
         .where(Bid.user_id == current_user.id)
-        .order_by(desc(Bid.created_at))
+        .order_by(desc(Bid.created_at), Bid.id), response, limit, offset,
     )
     bids = result.scalars().all()
 

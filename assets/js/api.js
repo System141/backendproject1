@@ -54,9 +54,45 @@
           err.status = res.status; // callers branch on 403 (not joined) vs 402 (insufficient credits)
           throw err;
         }
-        return data;
+        return opts.page ? { items: data, total: Number(res.headers.get("X-Total-Count") || data.length) } : data;
       });
     });
+  }
+
+  function loadPage(path, selector, render) {
+    var el = typeof selector === "string" ? document.querySelector(selector) : selector;
+    if (!el) return Promise.resolve();
+    var pager = el._pager;
+    if (!pager) {
+      pager = el._pager = document.createElement("nav");
+      pager.className = "pagination";
+      pager.setAttribute("aria-label", "Pagination");
+      (el.closest("table") || el).insertAdjacentElement("afterend", pager);
+    }
+    function load(offset) {
+      var request = el._pageRequest = (el._pageRequest || 0) + 1;
+      pager.querySelectorAll("button").forEach(function (button) { button.disabled = true; });
+      return api(path + (path.indexOf("?") < 0 ? "?" : "&") + "limit=50&offset=" + offset, { page: true }).then(function (page) {
+        if (request !== el._pageRequest) return;
+        if (offset && !page.items.length) return load(Math.max(0, offset - 50));
+        render(page.items, page.total);
+        pager.replaceChildren();
+        pager.hidden = page.total <= 50;
+        var previous = document.createElement("button"), next = document.createElement("button"), label = document.createElement("span");
+        previous.type = next.type = "button";
+        previous.className = next.className = "btn btn--outline btn--sm";
+        previous.textContent = window.t ? window.t("pagination_previous") : "Previous";
+        next.textContent = window.t ? window.t("pagination_next") : "Next";
+        previous.disabled = offset === 0;
+        next.disabled = offset + page.items.length >= page.total;
+        label.textContent = (page.total ? offset + 1 : 0) + "–" + (offset + page.items.length) + " / " + page.total;
+        label.setAttribute("aria-live", "polite");
+        previous.onclick = function () { load(offset - 50).catch(function (err) { banner(err.message, "error"); }); };
+        next.onclick = function () { load(offset + 50).catch(function (err) { banner(err.message, "error"); }); };
+        pager.append(previous, label, next);
+      });
+    }
+    return load(0);
   }
 
   function banner(msg, kind) {
@@ -291,7 +327,7 @@
     });
   }
 
-  function renderAuctionGrid(containerSel, auctions, categoriesById, emptyMessage) {
+  function renderAuctionGrid(containerSel, auctions, categoriesById, emptyMessage, append) {
     var container = document.querySelector(containerSel);
     if (!container) return;
     // Cache the card template on first use — an empty result wipes the
@@ -300,12 +336,12 @@
     var template = container.__cardTemplate || (container.__cardTemplate = container.querySelector(".auction"));
     if (!template) return;
     template = template.cloneNode(true);
-    container.innerHTML = "";
+    if (!append) container.innerHTML = "";
     if (!auctions.length) {
-      container.innerHTML = '<p class="tiny">' + esc(emptyMessage || "No live auctions right now — check back soon.") + "</p>";
+      if (!append) container.innerHTML = '<p class="tiny">' + esc(emptyMessage || "No live auctions right now — check back soon.") + "</p>";
       return;
     }
-    auctions.forEach(function (a) {
+    auctions.forEach(function (a, index) {
       var node = template.cloneNode(true);
       var catName = (categoriesById[a.category_id] || {}).name || "";
       var img = pickImage(catName);
@@ -314,6 +350,7 @@
         imgEl.src = "assets/img/" + img + ".webp";
         imgEl.srcset = "assets/img/" + img + "-md.webp 600w, assets/img/" + img + ".webp 1200w";
         imgEl.alt = raw(a.title);
+        imgEl.loading = append || index >= 3 ? "lazy" : "eager";
       }
       var detailHref = "auction.html?id=" + encodeURIComponent(a.id);
       var media = node.querySelector(".auction__media");
@@ -374,6 +411,7 @@
       // Single source of truth for every control on the page (chips, searchbar,
       // sort select, and the desktop/mobile filter panels share this).
       var state = { limit: 24, sort_by: "end_time", sort_dir: "asc" };
+      var loadedCount = 0, gridRequest = 0;
 
       function paramsFromState() {
         var p = {};
@@ -381,19 +419,27 @@
         return p;
       }
 
-      function refreshGrid() {
-        fetchAuctions(paramsFromState())
+      function refreshGrid(append) {
+        append = append === true;
+        var params = paramsFromState(), request = ++gridRequest;
+        params.offset = append ? loadedCount : 0;
+        var more = document.querySelector("[data-load-more]");
+        if (more) more.disabled = true;
+        fetchAuctions(params)
           .then(function (r) {
-            renderAuctionGrid(".grid-auctions", r.items, categoriesById);
+            if (request !== gridRequest) return;
+            loadedCount = params.offset + r.items.length;
+            renderAuctionGrid(".grid-auctions", r.items, categoriesById, null, append);
             var countEl = document.querySelector(".count");
             // "Label: N" avoids Slavic plural-agreement rules ("1 rezultat" vs
             // "2 rezultata" vs "5 rezultata") that a template string can't get
             // right for every N - see results_label in assets/js/i18n.js.
             if (countEl) countEl.textContent = (window.t ? window.t("results_label") : "Results found") + ": " + r.total;
             var loadMoreBtn = document.querySelector("[data-load-more]");
-            if (loadMoreBtn) loadMoreBtn.style.display = (r.items.length >= r.total || state.limit >= 100) ? "none" : "";
+            if (loadMoreBtn) loadMoreBtn.style.display = loadedCount >= r.total ? "none" : "";
           })
-          .catch(function () {});
+          .catch(function (err) { banner(err.message || "Failed to load auctions.", "error"); })
+          .finally(function () { if (request === gridRequest && more) more.disabled = false; });
       }
 
       function setCategory(id) {
@@ -520,8 +566,7 @@
         loadMoreBtn.addEventListener("click", function () {
           // renderAuctionGrid always replaces the grid wholesale, so "load more"
           // just widens the page size and re-renders the full (larger) set.
-          state.limit = Math.min(state.limit + 24, 100);
-          refreshGrid();
+          refreshGrid(true);
         });
       }
 
@@ -575,6 +620,7 @@
     var ws = null, wsTimer = null, wsDelay = 1000;
     var galleryUrls = [], galleryIndex = 0;
     var galleryObjectUrls = [];
+    var mediaCache = new Map(), mediaGeneration = 0, galleryKey = "", thumbObserver = null;
 
     function showNotFound() {
       root.classList.add("is-hidden");
@@ -583,24 +629,31 @@
     }
 
     function revokeGalleryObjectUrls() {
+      mediaGeneration++;
       galleryObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
       galleryObjectUrls = [];
+      mediaCache.clear();
+      if (thumbObserver) thumbObserver.disconnect();
     }
 
     function setMediaSource(img, url) {
       if (!img) return;
       if (!/^\/api\/uploads\//.test(url)) { img.src = url; return; }
-      fetch(url, { headers: token() ? { Authorization: "Bearer " + token() } : {} })
-        .then(function (res) {
-          if (!res.ok) throw new Error("Could not load image");
-          return res.blob();
-        })
-        .then(function (blob) {
-          var objectUrl = URL.createObjectURL(blob);
-          galleryObjectUrls.push(objectUrl);
-          img.src = objectUrl;
-        })
-        .catch(function () { img.removeAttribute("src"); });
+      img._mediaUrl = url;
+      var generation = mediaGeneration;
+      if (!mediaCache.has(url)) {
+        mediaCache.set(url, fetch(url, { headers: token() ? { Authorization: "Bearer " + token() } : {} })
+          .then(function (res) { if (!res.ok) throw new Error("Could not load image"); return res.blob(); })
+          .then(function (blob) {
+            if (generation !== mediaGeneration) return null;
+            var objectUrl = URL.createObjectURL(blob);
+            galleryObjectUrls.push(objectUrl);
+            return objectUrl;
+          }).catch(function (err) { if (generation === mediaGeneration) mediaCache.delete(url); throw err; }));
+      }
+      mediaCache.get(url).then(function (objectUrl) {
+        if (objectUrl && img._mediaUrl === url && generation === mediaGeneration) img.src = objectUrl;
+      }).catch(function () { if (img._mediaUrl === url) img.removeAttribute("src"); });
     }
 
     function showImage(idx) {
@@ -664,24 +717,32 @@
 
       var images = (a.images || []).filter(function (im) { return im.media_type !== "document"; })
         .sort(function (x, y) { return x.sort_order - y.sort_order; });
-      revokeGalleryObjectUrls();
-      galleryUrls = images.length ? images.map(function (im) { return im.image_url; })
+      var nextUrls = images.length ? images.map(function (im) { return im.image_url; })
         : ["assets/img/" + pickImage(catName) + ".webp"];
+      var nextKey = JSON.stringify(nextUrls) + (token() || "");
+      if (nextKey !== galleryKey) { revokeGalleryObjectUrls(); galleryKey = nextKey; galleryIndex = 0; }
+      galleryUrls = nextUrls;
       var thumbsEl = document.getElementById("det-thumbs");
       if (thumbsEl) {
+        if (thumbObserver) thumbObserver.disconnect();
+        thumbObserver = "IntersectionObserver" in window ? new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) { if (entry.isIntersecting) { setMediaSource(entry.target, entry.target.dataset.src); thumbObserver.unobserve(entry.target); } });
+        }, { rootMargin: "100px" }) : null;
         thumbsEl.innerHTML = "";
         if (galleryUrls.length > 1) {
           galleryUrls.forEach(function (url, n) {
             var t = document.createElement("img");
-            setMediaSource(t, url); t.alt = "";
+            t.dataset.src = /^\/api\/uploads\//.test(url) ? url + "?thumbnail=true" : url;
+            t.alt = ""; t.width = 80; t.height = 60; t.decoding = "async";
             t.addEventListener("click", function () { showImage(n); });
             thumbsEl.appendChild(t);
+            if (thumbObserver) thumbObserver.observe(t); else setMediaSource(t, t.dataset.src);
           });
         }
       }
       var mainImg = document.getElementById("det-image");
       if (mainImg) mainImg.onclick = function () { openLightbox(galleryIndex); };
-      showImage(0);
+      showImage(Math.min(galleryIndex, galleryUrls.length - 1));
 
       var docs = (a.images || []).filter(function (im) { return im.media_type === "document"; });
       var docsWrap = document.getElementById("det-docs-wrap");
@@ -830,8 +891,11 @@
     }
     window.addEventListener("pagehide", function () {
       clearTimeout(wsTimer);
-      if (ws) ws.close();
+      if (ws) { ws.onclose = null; ws.close(); }
+      revokeGalleryObjectUrls();
+      galleryKey = "";
     });
+    window.addEventListener("pageshow", function (event) { if (event.persisted) { load(); connectWS(id); } });
 
     function load() {
       Promise.all([
@@ -841,7 +905,7 @@
           .then(function (r) { return r.ok ? r.json() : { bids: [] }; })
           .then(function (d) { return d.bids || []; }) // GET .../bids wraps the array in {bids, total_count, ...}
           .catch(function () { return []; }),
-        token() ? api("/watchlist").catch(function () { return []; }) : Promise.resolve([]),
+        token() ? api("/watchlist?auction_id=" + encodeURIComponent(id)).catch(function () { return []; }) : Promise.resolve([]),
       ]).then(function (r) {
         var categoriesById = r[0], auction = r[1], bids = r[2], watchlist = r[3];
         if (!auction) { showNotFound(); return; }
@@ -971,7 +1035,7 @@
         }).join("");
       }).catch(function () {});
 
-      api("/auctions/bids/my").then(function (bids) {
+      loadPage("/auctions/bids/my", "#acct-bids-body", function (bids) {
         var body = document.getElementById("acct-bids-body");
         if (!body) return;
         if (!bids.length) { body.innerHTML = '<tr><td colspan="4" class="tiny">No bids yet.</td></tr>'; return; }
@@ -982,7 +1046,7 @@
         }).join("");
       }).catch(function () {});
 
-      api("/auctions/joined").then(function (joined) {
+      loadPage("/auctions/joined", "#acct-joined-body", function (joined) {
         var body = document.getElementById("acct-joined-body");
         if (!body) return;
         if (!joined.length) { body.innerHTML = '<tr><td colspan="4" class="tiny">You haven\'t joined any auctions yet.</td></tr>'; return; }
@@ -993,7 +1057,7 @@
         }).join("");
       }).catch(function () {});
 
-      api("/watchlist").then(function (items) {
+      loadPage("/watchlist", "#acct-watchlist-grid", function (items) {
         renderAuctionGrid("#acct-watchlist-grid", items, categoriesById, "Nothing in your watchlist yet.");
       }).catch(function () {});
 
@@ -1026,7 +1090,7 @@
       function refreshListings() {
         var el = document.getElementById("acct-listings-list");
         if (!el) return;
-        api("/auctions/my").then(function (items) {
+        loadPage("/auctions/my", el, function (items) {
           if (!items.length) { el.innerHTML = '<p class="tiny">You haven\'t listed anything yet.</p>'; return; }
           el.innerHTML = items.map(renderListingCard).join("");
         }).catch(function () {
@@ -1437,14 +1501,6 @@
 
     var STAFF_ROLES = { admin: 1, super_admin: 1, support: 1 };
     var deniedEl = document.getElementById("adm-denied");
-    // Shared cache: user id -> {name, email, ...}, filled once up front so the
-    // Sellers/Support tabs can show a name instead of a raw id (neither
-    // SellerProfileResponse nor SupportTicketResponse carries the applicant's
-    // name — only user_id).
-    var usersById = {};
-    // Same idea for the Bids tab: BidResponse only carries auction_id, not
-    // the auction's title/lot_code.
-    var auctionsById = {};
     var viewerRole = null; // read by wireUsersTab to hide staff-role options a non-super_admin can't grant anyway
 
     function showLoginPrompt() {
@@ -1488,23 +1544,13 @@
 
       loadOverview();
 
-      // Seed usersById/auctionsById before the tabs that need them render, so
-      // the first paint shows names rather than ids (not just a self-heal on
-      // a later refresh).
-      Promise.all([
-        api("/admin/users").then(function (users) {
-          users.forEach(function (u) { usersById[u.id] = u; });
-        }).catch(function () {}),
-        api("/admin/auctions").then(function (auctions) {
-          auctions.forEach(function (a) { auctionsById[a.id] = a; });
-        }).catch(function () {}),
-      ]).then(function () {
-        wireUsersTab();
-        wireSellersTab();
-        wireAuctionsTab();
-        wireBidsTab();
-        wireCategoriesTab();
-        wireSupportTab();
+      var tabLoaders = { users: wireUsersTab, sellers: wireSellersTab, auctions: wireAuctionsTab,
+        bids: wireBidsTab, categories: wireCategoriesTab, support: wireSupportTab };
+      Object.keys(tabLoaders).forEach(function (name) {
+        var tab = document.getElementById("tab-adm-" + name), loaded = false;
+        function load() { if (!loaded && tab.getAttribute("aria-selected") === "true") { loaded = true; tabLoaders[name](); } }
+        new MutationObserver(load).observe(tab, { attributes: true, attributeFilter: ["aria-selected"] });
+        load();
       });
     }).catch(showLoginPrompt);
 
@@ -1580,17 +1626,16 @@
       }
 
       function refresh() {
-        api("/admin/users").then(function (users) {
+        loadPage("/admin/users?search=" + encodeURIComponent(searchEl.value.trim()), listEl, function (users) {
           allUsers = users;
-          usersById = {};
-          users.forEach(function (u) { usersById[u.id] = u; });
           render();
         }).catch(function () {
           listEl.innerHTML = '<p class="tiny">Failed to load users.</p>';
         });
       }
 
-      searchEl.addEventListener("input", render);
+      var searchTimer;
+      searchEl.addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(refresh, 250); });
       listEl.addEventListener("click", function (e) {
         var saveBtn = e.target.closest("[data-save-role]");
         var statusBtn = e.target.closest("[data-set-status]");
@@ -1618,11 +1663,6 @@
       var filterEl = document.getElementById("adm-sellers-filter");
       var status = "pending";
 
-      function applicantLabel(userId) {
-        var u = usersById[userId];
-        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : userId;
-      }
-
       function row(p) {
         var actions = p.verification_status === "pending"
           ? '<button class="btn btn--outline btn--sm" type="button" data-verify-seller="' + p.id + '">Verify</button> ' +
@@ -1632,7 +1672,7 @@
           // Users-tab role editor), not just the apply -> verify flow.
           ? '<button class="btn btn--ghostred btn--sm" type="button" data-reject-seller="' + p.id + '">Revoke</button>'
           : (p.rejection_reason ? '<span class="tiny" style="color:#9f1239">' + escHtml(p.rejection_reason) + "</span>" : "");
-        return "<tr><td>" + applicantLabel(p.user_id) + "</td><td>" + escHtml(p.account_type) +
+        return "<tr><td>" + escHtml(p.user_name || p.user_id) + (p.user_email ? " (" + escHtml(p.user_email) + ")" : "") + "</td><td>" + escHtml(p.account_type) +
           (p.company_name ? " — " + escHtml(p.company_name) : "") + "</td><td>" + escHtml(p.city || "—") + "</td><td>" +
           escHtml(p.verification_status) + "</td><td>" + escHtml(new Date(p.created_at + "Z").toLocaleDateString()) +
           '</td><td style="white-space:nowrap">' + actions + "</td></tr>";
@@ -1640,8 +1680,8 @@
 
       function refresh() {
         var qs = status ? "?verification_status=" + status : "";
-        api("/admin/sellers" + qs).then(function (apps) {
-          setTabCount("sellers", apps.length);
+        loadPage("/admin/sellers" + qs, listEl, function (apps, total) {
+          setTabCount("sellers", total);
           if (!apps.length) { listEl.innerHTML = '<p class="tiny">No seller applications.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Applicant</th><th>Type</th><th>City</th><th>Status</th><th>Applied</th><th>Actions</th>" +
@@ -1695,8 +1735,8 @@
 
       function refresh() {
         var qs = status ? "?status=" + status : "";
-        api("/admin/auctions" + qs).then(function (auctions) {
-          setTabCount("auctions", auctions.length);
+        loadPage("/admin/auctions" + qs, listEl, function (auctions, total) {
+          setTabCount("auctions", total);
           if (!auctions.length) { listEl.innerHTML = '<p class="tiny">No auctions.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Title</th><th>Price</th><th>Status</th><th>Created</th><th>Actions</th>" +
@@ -1741,36 +1781,27 @@
     /* ------------------------------------------------------------- bids -- */
     function wireBidsTab() {
       var listEl = document.getElementById("adm-bids-list");
-      var auctionFilterEl = document.getElementById("adm-bids-auction-filter");
-
-      function auctionLabel(auctionId) {
-        var a = auctionsById[auctionId];
-        return a ? escHtml(a.lot_code ? a.lot_code + " — " + a.title : a.title) : (auctionId || "—");
-      }
-
-      function userLabel(uid) {
-        var u = usersById[uid];
-        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : (uid || "—");
-      }
+      var oldFilter = document.getElementById("adm-bids-auction-filter");
+      var auctionFilterEl = document.createElement("input");
+      auctionFilterEl.id = oldFilter.id;
+      auctionFilterEl.type = "search";
+      auctionFilterEl.placeholder = "Search auction title, Lot ID or auction ID";
+      auctionFilterEl.setAttribute("aria-label", auctionFilterEl.placeholder);
+      oldFilter.replaceWith(auctionFilterEl);
 
       function row(b) {
         var actions = b.invalidated
           ? '<span class="tiny">Invalidated</span>'
           : '<button class="btn btn--ghostred btn--sm" type="button" data-invalidate-bid="' + b.id + '">Invalidate</button>';
-        return "<tr><td>" + auctionLabel(b.auction_id) + "</td><td>" + userLabel(b.user_id) + "</td><td>" +
+        return "<tr><td>" + escHtml(b.auction_title || b.auction_id) + "</td><td>" + escHtml(b.user_name || b.user_id) + "</td><td>" +
           fmtEUR(b.amount) + "</td><td>" + escHtml(new Date(b.created_at + "Z").toLocaleString()) +
           "</td><td>" + actions + "</td></tr>";
       }
 
-      auctionFilterEl.innerHTML = '<option value="">All auctions</option>' +
-        Object.keys(auctionsById).map(function (id) {
-          return '<option value="' + id + '">' + auctionLabel(id) + "</option>";
-        }).join("");
-
       function refresh() {
         var auctionId = auctionFilterEl.value;
-        var qs = auctionId ? "?auction_id=" + encodeURIComponent(auctionId) : "";
-        api("/admin/bids" + qs).then(function (bids) {
+        var qs = auctionId ? "?auction_search=" + encodeURIComponent(auctionId) : "";
+        loadPage("/admin/bids" + qs, listEl, function (bids) {
           if (!bids.length) { listEl.innerHTML = '<p class="tiny">No bids.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Auction</th><th>Bidder</th><th>Amount</th><th>Placed</th><th>Actions</th>" +
@@ -1870,11 +1901,6 @@
       var filterEl = document.getElementById("adm-support-filter");
       var status = "open";
 
-      function userLabel(uid) {
-        var u = usersById[uid];
-        return u ? escHtml(u.name) + " (" + escHtml(u.email) + ")" : (uid || "—");
-      }
-
       function row(t) {
         var statusOpts = ["open", "in_progress", "resolved", "closed"].map(function (s) {
           return '<option value="' + s + '"' + (s === t.status ? " selected" : "") + ">" + s + "</option>";
@@ -1882,7 +1908,7 @@
         var preview = t.message.length > 140 ? escHtml(t.message.slice(0, 140)) + "…" : escHtml(t.message);
         return "<tr><td><b>" + escHtml(t.subject) + '</b><br><span class="tiny">' + preview + "</span>" +
           (t.lot_code ? '<br><span class="tiny">Lot: ' + escHtml(t.lot_code) + "</span>" : "") + "</td><td>" +
-          escHtml(t.category) + "</td><td>" + userLabel(t.user_id) + "</td><td>" +
+          escHtml(t.category) + "</td><td>" + escHtml(t.user_name || t.user_id) + "</td><td>" +
           escHtml(new Date(t.created_at + "Z").toLocaleDateString()) + "</td><td>" +
           '<select data-ticket-status="' + t.id + '" style="font:inherit">' + statusOpts + "</select> " +
           '<button class="btn btn--outline btn--sm" type="button" data-save-ticket="' + t.id + '">Save</button></td></tr>';
@@ -1890,8 +1916,8 @@
 
       function refresh() {
         var qs = status ? "?status=" + status : "";
-        api("/admin/support-tickets" + qs).then(function (tickets) {
-          setTabCount("support", tickets.length);
+        loadPage("/admin/support-tickets" + qs, listEl, function (tickets, total) {
+          setTabCount("support", total);
           if (!tickets.length) { listEl.innerHTML = '<p class="tiny">No tickets.</p>'; return; }
           listEl.innerHTML = '<div class="table-scroll"><table class="ctable"><thead><tr>' +
             "<th>Message</th><th>Category</th><th>User</th><th>Created</th><th>Status</th>" +

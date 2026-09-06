@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, 
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.database import get_db
 from app.models.domain import User, Auction, AuctionImage, PUBLIC_AUCTION_STATUSES
@@ -25,6 +26,27 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_BATCH_FILES = 10
 MAX_BATCH_CONTENT = 50 * 1024 * 1024
 MAX_CSV_CONTENT = 2 * 1024 * 1024
+thumbnail_slots = asyncio.Semaphore(2)
+
+
+def _thumbnail(filepath: str) -> str:
+    source = Path(filepath)
+    target = source.parent / ".thumbnails" / (source.name + ".webp")
+    if target.is_file() and target.stat().st_mtime_ns >= source.stat().st_mtime_ns:
+        return str(target)
+    target.parent.mkdir(exist_ok=True)
+    temporary = target.with_name(uuid.uuid4().hex + ".part")
+    try:
+        with Image.open(source) as image:
+            if image.width * image.height > 20_000_000:
+                raise ValueError("Image dimensions too large for a thumbnail")
+            image.thumbnail((320, 240))
+            thumbnail = ImageOps.exif_transpose(image)
+            thumbnail.save(temporary, format="WEBP", quality=75)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(target)
 
 # Upload directory (local storage for MVP) - publicly servable via the
 # `/uploads` static mount in main.py.
@@ -60,6 +82,8 @@ def _remove_file(filepath: str) -> None:
         os.remove(filepath)
     except FileNotFoundError:
         pass
+    source = Path(filepath)
+    (source.parent / ".thumbnails" / (source.name + ".webp")).unlink(missing_ok=True)
 
 
 def _safe_storage_path(storage_ref: str, root: str) -> str:
@@ -305,6 +329,7 @@ async def upload_documents_batch(
 @uploads_router.get("/{image_id}/download")
 async def download_file(
     image_id: str,
+    thumbnail: bool = False,
     db: AsyncSession = Depends(get_db),
     viewer: dict | None = Depends(get_current_user_optional),
 ):
@@ -337,5 +362,13 @@ async def download_file(
         raise HTTPException(status_code=404, detail="Media not found")
     if not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="Media missing on disk")
+    if thumbnail:
+        if img.media_type != "image":
+            raise HTTPException(status_code=400, detail="Thumbnails are available for images only")
+        async with thumbnail_slots:
+            try:
+                filepath = await asyncio.to_thread(_thumbnail, filepath)
+            except (ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+                raise HTTPException(status_code=400, detail="Cannot create thumbnail for this image")
     headers = {"Cache-Control": "private, no-store"} if img.visibility == "private" else {}
     return FileResponse(filepath, filename=os.path.basename(filepath), headers=headers)

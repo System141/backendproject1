@@ -16,6 +16,8 @@ from app.core.database import AsyncSessionLocal
 from app.models.domain import User
 
 AUTH_TIMEOUT_SECONDS = 5
+SEND_TIMEOUT_SECONDS = 2
+MAX_CONCURRENT_SENDS = 32
 
 ws_router = APIRouter()
 
@@ -26,6 +28,7 @@ class ConnectionManager:
         self.active_connections: dict[str, dict[str, set[WebSocket]]] = {}
         self.connection_metadata: dict[WebSocket, tuple[str, int, int]] = {}
         self._heartbeat_task: asyncio.Task | None = None
+        self._send_slots = asyncio.Semaphore(MAX_CONCURRENT_SENDS)
 
     async def _heartbeat(self):
         """Periodically ping all connections to detect stale ones."""
@@ -57,11 +60,11 @@ class ConnectionManager:
                     )
                     try:
                         if invalid:
-                            await ws.close(code=4003, reason="Session expired")
+                            await asyncio.wait_for(ws.close(code=4003, reason="Session expired"), SEND_TIMEOUT_SECONDS)
                         else:
-                            await ws.send_json({"type": "ping"})
+                            await asyncio.wait_for(ws.send_json({"type": "ping"}), SEND_TIMEOUT_SECONDS)
                     except Exception:
-                        pass
+                        invalid = True
                     if invalid:
                         stale.add(ws)
                 for ws in stale:
@@ -73,6 +76,12 @@ class ConnectionManager:
     async def start_heartbeat(self):
         if self._heartbeat_task is None:
             self._heartbeat_task = asyncio.create_task(self._heartbeat())
+
+    async def stop_heartbeat(self):
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            await asyncio.gather(self._heartbeat_task, return_exceptions=True)
+            self._heartbeat_task = None
 
     async def connect(self, websocket: WebSocket, auction_id: str, user_id: str, auth_version: int, expires_at: int):
         # Caller (auction_websocket) already accepted the socket - it has to,
@@ -124,13 +133,18 @@ class ConnectionManager:
         if not room:
             return
         payload = json.dumps(message)
-        stale = set()
-        for ws in room["connections"]:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                stale.add(ws)
+        async def send(ws):
+            async with self._send_slots:
+                try:
+                    await asyncio.wait_for(ws.send_text(payload), SEND_TIMEOUT_SECONDS)
+                except Exception:
+                    return ws
+            return None
+
+        stale = await asyncio.gather(*(send(ws) for ws in list(room["connections"])))
         for ws in stale:
+            if ws is None:
+                continue
             room["connections"].discard(ws)
             self.connection_metadata.pop(ws, None)
         if not room["connections"]:

@@ -1,0 +1,21 @@
+{
+  "commit": "0c6c2cc3389b51401777e9dccb892016b6cb179f",
+  "date": "2026-09-06",
+  "environment": "Windows, Python 3.14.6, FastAPI 0.136.3, SQLAlchemy 2.0.50, aiosqlite 0.22.1, httpx 0.28.1",
+  "dataset": {"auctions": 1000, "bids": 100000, "images": 5000},
+  "method": "In-process HTTP ASGI; in-memory SQLite; one warmup then five sequential requests; real JWT validation; no lifespan/scheduler/proxy/network.",
+  "list_24": {"median_ms": 13.84, "range_ms": [12.53, 16.86], "sql_queries": 5, "response_bytes": 30917},
+  "bid_history_50": {"median_ms": 22.59, "range_ms": [21.8, 24.73], "sql_queries": 3, "response_bytes": 14045},
+  "admin_all_1000": {"median_ms": 150.06, "range_ms": [141.27, 208.92], "sql_queries": 6, "response_bytes": 1290781},
+  "joined_1": {"median_ms": 14.96, "range_ms": [14.67, 15.79], "sql_queries": 4, "response_bytes": 160},
+  "joined_10": {"median_ms": 101.04, "range_ms": [97.8, 102.46], "sql_queries": 13, "response_bytes": 1591},
+  "joined_100": {"median_ms": 917.2, "range_ms": [901.96, 934.15], "sql_queries": 103, "response_bytes": 16081},
+  "bid_with_two_simulated_100ms_emails": {"total_ms": 248.16, "email_calls": 2},
+  "headers_/": {"content-encoding": null, "cache-control": "no-cache, must-revalidate", "etag": "present"},
+  "headers_/assets/js/api.js": {"content-encoding": null, "cache-control": null, "etag": "present"},
+  "bid_index_before": {"median_ms": 8.362, "plan": ["SCAN bids", "USE TEMP B-TREE FOR ORDER BY"]},
+  "bid_index_after": {"median_ms": 0.451, "plan": ["SEARCH bids USING INDEX probe_bid_lookup (auction_id=? AND invalidated=?)"]},
+  "broadcast_20_simulated_10ms_sockets": {"total_ms": 306.24},
+  "initial_text": {"raw_bytes": 243172, "gzip_bytes": 59246},
+  "test_suite": {"passed": 293, "warnings": 18, "seconds": 89.79}
+}

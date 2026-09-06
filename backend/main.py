@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +24,7 @@ from app.models.domain import Category
 from app.api import auth_router, users_router, auctions_router, uploads_router, bids_router, ws_router, support_router, admin_router, notifications_router, watchlist_router, legal_router, sellers_router
 from app.api.credits import credits_router
 from app.api.ws import manager
-from app.services.notifications import alert_admins
+from app.services.notifications import alert_admins, run_email_worker
 
 # Import all models so Base metadata is populated
 from app.models import *
@@ -132,11 +133,15 @@ async def lifespan(app: FastAPI):
         await seed_default_credit_packages(seed_db)
     # Start background scheduler for auto-finalize
     scheduler_task = asyncio.create_task(run_scheduler())
+    email_task = asyncio.create_task(run_email_worker())
     await manager.start_heartbeat()
     logger.info("Startup complete (scheduler + heartbeat started).")
     yield
     # Shutdown: cancel scheduler
     scheduler_task.cancel()
+    email_task.cancel()
+    await asyncio.gather(scheduler_task, email_task, return_exceptions=True)
+    await manager.stop_heartbeat()
     logger.info("Shutdown complete (scheduler cancelled).")
 
 
@@ -148,7 +153,19 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
+class TextCompressionMiddleware(GZipMiddleware):
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if path.startswith(("/api/uploads", "/assets/img/")) or path.endswith((".png", ".ico", ".webp", ".jpg")):
+            await self.app(scope, receive, send)
+        else:
+            await super().__call__(scope, receive, send)
+
+
 app.add_middleware(RequestBodyLimitMiddleware)
+# Disable when the deployment proxy already compresses responses.
+if os.getenv("HTTP_COMPRESSION", "true").lower() == "true":
+    app.add_middleware(TextCompressionMiddleware, minimum_size=1000, compresslevel=5)
 
 # Register rate-limit error handler
 app.state.limiter = limiter

@@ -15,6 +15,8 @@ class SellerApplicationRequest(BaseModel):
 class SellerProfileResponse(BaseModel):
     id: str
     user_id: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
     account_type: str
     company_name: Optional[str] = None
     pib: Optional[str] = None

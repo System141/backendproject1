@@ -1,0 +1,113 @@
+{
+  "environment": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+  "dataset": {
+    "auctions": 1000,
+    "bids": 100000,
+    "images": 5000
+  },
+  "method": "In-process HTTP ASGI; in-memory SQLite; one warmup then five sequential requests; real JWT validation; no lifespan/scheduler/proxy/network.",
+  "list_24": {
+    "median_ms": 9.7,
+    "range_ms": [
+      8.58,
+      69.41
+    ],
+    "sql_queries": 4,
+    "response_bytes": 30973
+  },
+  "bid_history_50": {
+    "median_ms": 6.59,
+    "range_ms": [
+      5.94,
+      9.11
+    ],
+    "sql_queries": 3,
+    "response_bytes": 14045
+  },
+  "admin_page_50": {
+    "median_ms": 15.07,
+    "range_ms": [
+      15.0,
+      16.13
+    ],
+    "sql_queries": 5,
+    "response_bytes": 64533
+  },
+  "joined_1": {
+    "median_ms": 6.39,
+    "range_ms": [
+      5.95,
+      7.08
+    ],
+    "sql_queries": 3,
+    "response_bytes": 160
+  },
+  "joined_10": {
+    "median_ms": 6.18,
+    "range_ms": [
+      5.75,
+      7.45
+    ],
+    "sql_queries": 3,
+    "response_bytes": 1591
+  },
+  "joined_100": {
+    "median_ms": 8.05,
+    "range_ms": [
+      7.47,
+      8.6
+    ],
+    "sql_queries": 3,
+    "response_bytes": 16081
+  },
+  "bid_with_two_simulated_100ms_emails": {
+    "request_ms": 29.84,
+    "inline_email_calls": 0,
+    "worker_email_calls": 2
+  },
+  "headers_/": {
+    "content-encoding": "gzip",
+    "cache-control": "no-cache, must-revalidate",
+    "etag": "\"4ad4df04b1dc90e908aee2d92e5c3f88\""
+  },
+  "headers_/assets/js/api.js": {
+    "content-encoding": "gzip",
+    "cache-control": null,
+    "etag": "\"ddc22c8074a540e22e8806e33231683b\""
+  },
+  "bid_index_before": {
+    "median_ms": 8.209,
+    "plan": [
+      [
+        4,
+        0,
+        216,
+        "SCAN bids"
+      ],
+      [
+        23,
+        0,
+        0,
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    ]
+  },
+  "bid_index_after": {
+    "median_ms": 0.436,
+    "plan": [
+      [
+        5,
+        0,
+        61,
+        "SEARCH bids USING INDEX probe_bid_lookup (auction_id=? AND invalidated=?)"
+      ]
+    ]
+  },
+  "broadcast_20_simulated_10ms_sockets": {
+    "total_ms": 24.89
+  },
+  "initial_text": {
+    "raw_bytes": 246997,
+    "gzip_bytes": 60308
+  }
+}

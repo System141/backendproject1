@@ -13,9 +13,12 @@ async def test_run_migration_creates_missing_indexes():
     existed before domain.py's columns gained index=True, so a typo or a
     dropped loop here would silently leave a deployed DB unindexed."""
     async with test_engine.begin() as conn:
+        for _, _, name in MISSING_INDEXES:
+            await conn.execute(text(f'DROP INDEX IF EXISTS "{name}"'))
+        await run_migration_async(conn)
         await run_migration_async(conn)
         result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='auctions'")
+            text("SELECT name FROM sqlite_master WHERE type='index'")
         )
         names = {row[0] for row in result.fetchall()}
     missing = {name for _, _, name in MISSING_INDEXES} - names

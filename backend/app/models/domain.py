@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, String, Float, Integer, ForeignKey, DateTime, Enum, Text, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 import enum
 
@@ -213,6 +213,10 @@ class Bid(Base):
     user = relationship("User", foreign_keys=[user_id])
     auction = relationship("Auction", backref="bids")
 
+    __table_args__ = (
+        Index("ix_bids_auction_ranking", auction_id, invalidated, amount.desc(), created_at, id),
+    )
+
 
 class AuctionImage(Base):
     """Doc §18's "AuctionMedia" entity: real images/documents, type, order,
@@ -222,7 +226,7 @@ class AuctionImage(Base):
     __tablename__ = "auction_images"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False)
+    auction_id = Column(String, ForeignKey("auctions.id"), nullable=False, index=True)
     image_url = Column(String, nullable=False)
     sort_order = Column(Integer, default=0)
     media_type = Column(String, nullable=False, default="image")  # image | document
@@ -248,6 +252,7 @@ class AuctionParticipant(Base):
 
     __table_args__ = (
         UniqueConstraint("auction_id", "user_id", name="uq_auction_participant"),
+        Index("ix_auction_participants_user_joined", user_id, joined_at.desc(), id),
     )
 
 
@@ -379,6 +384,26 @@ class Notification(Base):
 
     user = relationship("User")
     auction = relationship("Auction")
+
+    __table_args__ = (
+        Index("ix_notifications_user_read", user_id, is_read),
+        Index("ix_notifications_user_created", user_id, created_at.desc()),
+    )
+
+
+class NotificationEmail(Base):
+    """Durable email delivery; SMTP never runs inside the originating request."""
+    __tablename__ = "notification_emails"
+
+    notification_id = Column(String, ForeignKey("notifications.id"), primary_key=True)
+    recipient = Column(String, nullable=False)
+    subject = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    next_attempt_at = Column(DateTime, default=_utcnow, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_notification_emails_pending", sent_at, next_attempt_at),)
 
 
 class NotificationTemplate(Base):

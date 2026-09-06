@@ -8,16 +8,20 @@ Design (ponytail: minimal path):
 import asyncio
 import os
 import smtplib
+import logging
 import uuid
 from email.message import EmailMessage
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.models.domain import Notification, NotificationType, NotificationTemplate, User, Auction, UserRole
+from app.models.domain import Notification, NotificationEmail, NotificationType, NotificationTemplate, User, Auction, UserRole, _utcnow
+from app.core.database import AsyncSessionLocal
+
+logger = logging.getLogger("bidmont.email")
 
 # Doc §17 admin panel checklist: "Notification template management". Only
 # these types can be admin-customized - each entry lists the placeholder
@@ -65,12 +69,14 @@ def _send_email(to: str, subject: str, body: str):
     msg["To"] = to
 
     try:
-        with smtplib.SMTP(config["host"], config["port"]) as server:
+        with smtplib.SMTP(config["host"], config["port"], timeout=10) as server:
             server.starttls()
             server.login(config["user"], config["password"])
             server.send_message(msg)
+        return True
     except Exception:
-        pass  # ponytail: silently fail — don't break the app for email
+        logger.warning("SMTP delivery failed", exc_info=True)
+        return False
 
 
 def _render_template_field(template_value: Optional[str], template_vars: dict, fallback: str) -> str:
@@ -152,30 +158,61 @@ async def send_notification(
                 db.add(notif)
         except IntegrityError:
             return None  # already sent for this event_key
-        await db.commit()
     else:
         db.add(notif)
-        await db.commit()
 
-    # Send email if configured and requested
-    if send_email:
+    # Store delivery in the same transaction. No ORM session crosses into SMTP.
+    if send_email and _get_smtp_config():
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalars().first()
         if user and user.email:
             use_me = user.preferred_language == "me" and title_me and message_me
-            # ponytail: smtplib.SMTP is blocking sync I/O; this app runs as a
-            # single asyncio process (CLAUDE.md: scheduler + WS broadcast are
-            # in-process tasks), so calling it inline here stalls every other
-            # request - including unrelated static page loads - for the SMTP
-            # round trip. to_thread offloads it without a new dependency.
-            # Root-cause fix: send_notification() is the only caller of
-            # _send_email() left on the hot request/scheduler path (auth.py's
-            # verification email already goes through to_thread too).
-            await asyncio.to_thread(
-                _send_email, user.email, title_me if use_me else title, message_me if use_me else message
-            )
-
+            db.add(NotificationEmail(
+                notification_id=notif.id, recipient=user.email,
+                subject=title_me if use_me else title,
+                body=message_me if use_me else message,
+            ))
+    await db.commit()
     return notif
+
+
+async def deliver_pending_emails(session_factory=AsyncSessionLocal):
+    if not _get_smtp_config():
+        return
+    async with session_factory() as db:
+        rows = (await db.execute(select(NotificationEmail).where(
+            NotificationEmail.sent_at.is_(None), NotificationEmail.attempts < 5,
+            NotificationEmail.next_attempt_at <= _utcnow(),
+        ).order_by(NotificationEmail.next_attempt_at, NotificationEmail.notification_id).limit(25))).scalars().all()
+    # ponytail: one delivery worker for the single-process deployment. A crash
+    # after SMTP accepts mail can repeat it; multi-worker delivery needs claims.
+    for row in rows:
+        try:
+            delivered = await asyncio.to_thread(_send_email, row.recipient, row.subject, row.body)
+        except Exception:
+            logger.exception("Email job failed for notification %s", row.notification_id)
+            delivered = False
+        async with session_factory() as db:
+            saved = await db.get(NotificationEmail, row.notification_id)
+            if saved is None:
+                continue
+            saved.attempts += 1
+            if delivered:
+                saved.sent_at = _utcnow()
+            else:
+                saved.next_attempt_at = _utcnow() + timedelta(seconds=30 * 2 ** saved.attempts)
+                if saved.attempts == 5:
+                    logger.error("Email retry limit reached for notification %s", row.notification_id)
+            await db.commit()
+
+
+async def run_email_worker():
+    while True:
+        try:
+            await deliver_pending_emails()
+        except Exception:
+            logger.exception("Email delivery worker failed")
+        await asyncio.sleep(2)
 
 
 async def alert_admins(db: AsyncSession, title: str, message: str, event_key: Optional[str] = None):

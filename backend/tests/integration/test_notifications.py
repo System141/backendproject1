@@ -119,13 +119,18 @@ class TestPreferredLanguageEmail:
         def fake_send_email(to, subject, body):
             sent["subject"] = subject
             sent["body"] = body
+            return True
         monkeypatch.setattr(notif_module, "_send_email", fake_send_email)
+        monkeypatch.setattr(notif_module, "_get_smtp_config", lambda: {"configured": True})
 
         await send_notification(
             db_session, test_user.id, NotificationType.bid_received,
             "New bid", "English body", send_email=True,
             title_me="Nova ponuda", message_me="Crnogorski tekst",
         )
+        assert sent == {}
+        from tests.conftest import TestSessionLocal
+        await notif_module.deliver_pending_emails(TestSessionLocal)
         assert sent["subject"] == "Nova ponuda"
         assert sent["body"] == "Crnogorski tekst"
 
@@ -146,13 +151,17 @@ class TestPreferredLanguageEmail:
         def fake_send_email(to, subject, body):
             sent["subject"] = subject
             sent["body"] = body
+            return True
         monkeypatch.setattr(notif_module, "_send_email", fake_send_email)
+        monkeypatch.setattr(notif_module, "_get_smtp_config", lambda: {"configured": True})
 
         await send_notification(
             db_session, test_user.id, NotificationType.outbid,
             "Outbid", "English body", send_email=True,
             title_me="Nadmašeni", message_me="Crnogorski tekst",
         )
+        from tests.conftest import TestSessionLocal
+        await notif_module.deliver_pending_emails(TestSessionLocal)
         assert sent["subject"] == "Outbid"
         assert sent["body"] == "English body"
 

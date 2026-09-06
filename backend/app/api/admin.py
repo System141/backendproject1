@@ -3,12 +3,14 @@ import os
 import uuid
 import string as string_module
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, desc, asc, func, text
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.services.pagination import page_query
 from app.core.security import (
     get_current_admin, get_current_staff, hash_password, create_access_token,
     generate_totp_secret, verify_totp, totp_otpauth_url,
@@ -138,19 +140,25 @@ async def seed_admin(
 # ===================== USERS =====================
 @admin_router.get("/users", response_model=list[UserResponse])
 async def admin_list_users(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    search: str | None = Query(None, max_length=200),
     role: str | None = Query(None, description="Filter by role"),
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all users with optional filters. Admin only."""
-    query = select(User).order_by(desc(User.created_at))
+    query = select(User).order_by(desc(User.created_at), User.id)
+    if search:
+        query = query.where(User.name.ilike(f"%{search}%") | User.email.ilike(f"%{search}%"))
     if role:
         query = query.where(User.role == UserRole(role))
     if status:
         query = query.where(User.status == status)
 
-    result = await db.execute(query)
+    result = await page_query(db, query, response, limit, offset)
     users = result.scalars().all()
     return [
         UserResponse(
@@ -582,16 +590,19 @@ async def admin_adjust_credits(
 # ===================== SELLER APPLICATIONS =====================
 @admin_router.get("/sellers", response_model=list[SellerProfileResponse])
 async def admin_list_seller_applications(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     verification_status: str | None = Query(None, description="Filter by pending/verified/rejected"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List seller applications (doc §11.3/§17). Admin only."""
-    query = select(SellerProfile).order_by(desc(SellerProfile.created_at))
+    query = select(SellerProfile, User.name, User.email).join(User, User.id == SellerProfile.user_id).order_by(desc(SellerProfile.created_at), SellerProfile.id)
     if verification_status:
         query = query.where(SellerProfile.verification_status == SellerVerificationStatus(verification_status))
-    result = await db.execute(query)
-    return result.scalars().all()
+    result = await page_query(db, query, response, limit, offset)
+    return [SellerProfileResponse.model_validate(p).model_copy(update={"user_name": name, "user_email": email}) for p, name, email in result.all()]
 
 
 @admin_router.post("/sellers/{profile_id}/verify", response_model=SellerProfileResponse)
@@ -676,6 +687,9 @@ async def admin_reject_seller(
 # ===================== AUCTIONS =====================
 @admin_router.get("/auctions", response_model=list[AuctionResponse])
 async def admin_list_auctions(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     status: str | None = Query(None, description="Filter by status"),
     featured: bool | None = Query(None, description="Filter by featured"),
     current_user: User = Depends(get_current_admin),
@@ -686,15 +700,15 @@ async def admin_list_auctions(
 
     query = (
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
-        .order_by(desc(Auction.created_at))
+        .options(selectinload(Auction.seller).selectinload(User.seller_profile))
+        .order_by(desc(Auction.created_at), Auction.id)
     )
     if status:
         query = query.where(Auction.status == AuctionStatus(status))
     if featured is not None:
         query = query.where(Auction.is_featured == featured)
 
-    result = await db.execute(query)
+    result = await page_query(db, query, response, limit, offset)
     auctions = result.scalars().all()
 
     return [build_auction_response(a) for a in auctions]
@@ -815,19 +829,27 @@ async def admin_cancel_auction(
 # ===================== BIDS =====================
 @admin_router.get("/bids", response_model=list[BidResponse])
 async def admin_list_bids(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    auction_search: str | None = Query(None, max_length=200),
     auction_id: str | None = Query(None, description="Filter by auction ID"),
     user_id: str | None = Query(None, description="Filter by user ID"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all bids with optional filters. Admin only."""
-    query = select(Bid).order_by(desc(Bid.created_at))
+    query = select(Bid).options(selectinload(Bid.user), selectinload(Bid.auction)).order_by(desc(Bid.created_at), Bid.id)
+    if auction_search:
+        query = query.join(Auction, Auction.id == Bid.auction_id).where(
+            Auction.title.ilike(f"%{auction_search}%") | Auction.lot_code.ilike(f"%{auction_search}%") | (Auction.id == auction_search)
+        )
     if auction_id:
         query = query.where(Bid.auction_id == auction_id)
     if user_id:
         query = query.where(Bid.user_id == user_id)
 
-    result = await db.execute(query)
+    result = await page_query(db, query, response, limit, offset)
     bids = result.scalars().all()
 
     return [
@@ -838,6 +860,9 @@ async def admin_list_bids(
             amount=b.amount,
             created_at=b.created_at,
             invalidated=b.invalidated,
+            user_name=b.user.name if b.user else None,
+            auction_title=b.auction.title if b.auction else None,
+            auction_lot_code=b.auction.lot_code if b.auction else None,
         )
         for b in bids
     ]
@@ -873,7 +898,7 @@ async def admin_invalidate_bid(
         highest_result = await db.execute(
             select(Bid)
             .where(Bid.auction_id == auction.id, Bid.invalidated == False, Bid.id != bid.id)  # noqa: E712
-            .order_by(desc(Bid.amount), asc(Bid.created_at))
+            .order_by(desc(Bid.amount), asc(Bid.created_at), Bid.id)
             .limit(1)
         )
         highest = highest_result.scalars().first()
@@ -897,21 +922,25 @@ async def admin_invalidate_bid(
 # ===================== SUPPORT TICKETS =====================
 @admin_router.get("/support-tickets", response_model=list[SupportTicketResponse])
 async def admin_list_tickets(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_staff),
     db: AsyncSession = Depends(get_db),
 ):
     """List all support tickets with optional status filter. Staff (admin/super_admin/support)."""
-    query = select(SupportTicket).order_by(desc(SupportTicket.created_at))
+    query = select(SupportTicket, User.name).outerjoin(User, User.id == SupportTicket.user_id).order_by(desc(SupportTicket.created_at), SupportTicket.id)
     if status:
         query = query.where(SupportTicket.status == status)
 
-    result = await db.execute(query)
-    tickets = result.scalars().all()
+    result = await page_query(db, query, response, limit, offset)
+    tickets = result.all()
     return [
         SupportTicketResponse(
             id=t.id,
             user_id=t.user_id or "",
+            user_name=user_name,
             subject=t.subject,
             message=t.message,
             category=t.category,
@@ -920,7 +949,7 @@ async def admin_list_tickets(
             created_at=str(t.created_at) if t.created_at else "",
             updated_at=str(t.updated_at) if t.updated_at else "",
         )
-        for t in tickets
+        for t, user_name in tickets
     ]
 
 
@@ -1017,19 +1046,22 @@ async def admin_create_legal_document(
 # ===================== AUDIT LOGS =====================
 @admin_router.get("/audit-logs")
 async def admin_list_audit_logs(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     action: str | None = Query(None, description="Filter by action"),
     entity_type: str | None = Query(None, description="Filter by entity type"),
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List audit logs with optional filters. Admin only."""
-    query = select(AuditLog).order_by(desc(AuditLog.created_at))
+    query = select(AuditLog).order_by(desc(AuditLog.created_at), AuditLog.id)
     if action:
         query = query.where(AuditLog.action == action)
     if entity_type:
         query = query.where(AuditLog.entity_type == entity_type)
 
-    result = await db.execute(query)
+    result = await page_query(db, query, response, limit, offset)
     logs = result.scalars().all()
 
     return [

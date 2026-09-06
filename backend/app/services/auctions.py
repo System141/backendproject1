@@ -188,7 +188,7 @@ async def finalize_auction(
     bid_result = await db.execute(
         select(Bid)
         .where(Bid.auction_id == auction.id, Bid.invalidated == False)  # noqa: E712
-        .order_by(desc(Bid.amount), asc(Bid.created_at))
+        .order_by(desc(Bid.amount), asc(Bid.created_at), Bid.id)
         .limit(1)
     )
     highest_bid = bid_result.scalars().first()

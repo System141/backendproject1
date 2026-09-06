@@ -36,6 +36,7 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-noreply@bidmont.com}
+      - HTTP_COMPRESSION=${HTTP_COMPRESSION:-true}
     depends_on:
       bidmont-db:
         condition: service_healthy

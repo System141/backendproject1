@@ -1,3 +1,6 @@
+.pagination { display:flex; align-items:center; justify-content:center; gap:1rem; margin-block:1rem; }
+.pagination[hidden] { display:none; }
+
 /* ==========================================================================
    BidMont — bidmont.me
    Design tokens + components. Mobile first, breakpoints at 640 / 900 / 1120.

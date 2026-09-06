@@ -17,6 +17,7 @@ from app.models.domain import (
 )
 from app.services.notifications import send_notification
 from app.services.credits import apply_ledger_entry
+from app.services.pagination import page_query
 from app.services.auctions import (
     build_auction_response, build_auction_image_response, visible_auction_images,
     generate_lot_code, looks_like_direct_contact, get_or_create_seller_declaration,
@@ -244,7 +245,7 @@ async def list_auctions(
     """List auctions with optional filters. Public endpoint. Total matching
     count (pre-pagination) is returned in the X-Total-Count header for
     frontend pagination/load-more (doc §4.4)."""
-    query = select(Auction).options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
+    query = select(Auction).options(selectinload(Auction.seller).selectinload(User.seller_profile))
 
     if category_id:
         query = query.where(Auction.category_id == category_id)
@@ -302,7 +303,7 @@ async def list_auctions(
     # Sorting
     sort_col = getattr(Auction, sort_by)
     order_fn = desc if sort_dir == "desc" else asc
-    query = query.order_by(order_fn(sort_col))
+    query = query.order_by(order_fn(sort_col), Auction.id)
 
     query = query.offset(offset).limit(limit)
 
@@ -353,15 +354,18 @@ async def autocomplete_auctions(
 # ========== MY AUCTIONS (seller) ==========
 @auctions_router.get("/my", response_model=list[AuctionResponse])
 async def my_auctions(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_seller),
     db: AsyncSession = Depends(get_db),
 ):
     """List current user's own auctions. Seller only."""
-    result = await db.execute(
+    result = await page_query(db,
         select(Auction)
-        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
+        .options(selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(Auction.seller_id == current_user.id)
-        .order_by(desc(Auction.created_at))
+        .order_by(desc(Auction.created_at), Auction.id), response, limit, offset,
     )
     auctions = result.scalars().all()
     return [build_auction_response(a, include_review_notes=True) for a in auctions]
@@ -369,6 +373,9 @@ async def my_auctions(
 
 @auctions_router.get("/joined", response_model=list[JoinedAuctionResponse])
 async def joined_auctions(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -377,32 +384,25 @@ async def joined_auctions(
     user's bid standing. Must be registered before the /{auction_id} route
     below - Starlette matches path routes in registration order, so a literal
     "/joined" would otherwise be swallowed as auction_id="joined"."""
-    result = await db.execute(
-        select(AuctionParticipant)
-        .options(selectinload(AuctionParticipant.auction))
-        .where(AuctionParticipant.user_id == current_user.id)
-        .order_by(desc(AuctionParticipant.joined_at))
+    leader = (
+        select(Bid.user_id)
+        .where(Bid.auction_id == AuctionParticipant.auction_id, Bid.invalidated.is_(False))
+        .order_by(Bid.amount.desc(), Bid.created_at, Bid.id)
+        .limit(1).correlate(AuctionParticipant).scalar_subquery()
     )
-    participants = result.scalars().all()
-
+    result = await page_query(db,
+        select(AuctionParticipant, Auction.title, Auction.status, leader.label("leader_id"))
+        .outerjoin(Auction, Auction.id == AuctionParticipant.auction_id)
+        .where(AuctionParticipant.user_id == current_user.id)
+        .order_by(desc(AuctionParticipant.joined_at), AuctionParticipant.id), response, limit, offset,
+    )
     responses = []
-    for p in participants:
-        auction = p.auction
-        my_bid_status = "no_bid"
-        if auction:
-            highest_result = await db.execute(
-                select(Bid)
-                .where(Bid.auction_id == auction.id, Bid.invalidated == False)  # noqa: E712
-                .order_by(desc(Bid.amount), asc(Bid.created_at))
-                .limit(1)
-            )
-            highest_bid = highest_result.scalars().first()
-            if highest_bid:
-                my_bid_status = "highest" if highest_bid.user_id == current_user.id else "outbid"
+    for p, title, auction_status, leader_id in result.all():
+        my_bid_status = "no_bid" if leader_id is None else ("highest" if leader_id == current_user.id else "outbid")
         responses.append(JoinedAuctionResponse(
             auction_id=p.auction_id,
-            auction_title=auction.title if auction else "",
-            auction_status=auction.status.value if auction else "",
+            auction_title=title or "",
+            auction_status=auction_status.value if auction_status else "",
             credits_spent=p.credits_spent,
             joined_at=p.joined_at,
             my_bid_status=my_bid_status,

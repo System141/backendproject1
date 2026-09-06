@@ -44,6 +44,8 @@
   // "me" is not a valid BCP47 subtag though, so <html lang> uses Montenegrin's
   // actual registered tag ("cnr") instead. Two different jobs, two codes.
   var HTML_LANG = { me: "cnr", en: "en" };
+  I18N.pagination_previous = { en: "Previous", me: "Prethodna" };
+  I18N.pagination_next = { en: "Next", me: "Sljedeća" };
 
   function currentLang() {
     var saved = localStorage.getItem("lang");

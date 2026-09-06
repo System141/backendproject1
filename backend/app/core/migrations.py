@@ -5,7 +5,7 @@ Both main.py lifespan startup and admin.py seed endpoint consume this single
 source of truth instead of duplicating the column definitions.
 """
 import logging
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 logger = logging.getLogger("bidmont.migrations")
 
@@ -126,80 +126,65 @@ MISSING_INDEXES = [
     ("auctions", "created_at", "ix_auctions_created_at"),
     ("auctions", "current_price", "ix_auctions_current_price"),
     ("auctions", "participation_credit_cost", "ix_auctions_participation_credit_cost"),
+    ("bids", "auction_id, invalidated, amount DESC, created_at, id", "ix_bids_auction_ranking"),
+    ("auction_images", "auction_id", "ix_auction_images_auction_id"),
+    ("auction_participants", "user_id, joined_at DESC, id", "ix_auction_participants_user_joined"),
+    ("notifications", "user_id, is_read", "ix_notifications_user_read"),
+    ("notifications", "user_id, created_at DESC", "ix_notifications_user_created"),
 ]
 
 
 async def run_migration_async(conn):
     """Add missing columns using async connection. Safe for repeated runs."""
+    tables = await conn.run_sync(lambda sync: inspect(sync).get_table_names())
     for table, columns in MISSING_COLUMNS.items():
+        if table not in tables:
+            continue
+        existing = await conn.run_sync(lambda sync: {c["name"] for c in inspect(sync).get_columns(table)})
         for col_name, col_type in columns:
+            if col_name in existing:
+                continue
             try:
-                sql = text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS {col_name} {col_type}')
-                await conn.execute(sql)
+                async with conn.begin_nested():
+                    sql = text(f'ALTER TABLE "{table}" ADD COLUMN {col_name} {col_type}')
+                    await conn.execute(sql)
                 logger.info(f"Migration: added {table}.{col_name}")
             except Exception as e:
                 logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
+    enums = await conn.run_sync(lambda sync: {e["name"] for e in inspect(sync).get_enums()}) if conn.dialect.name == "postgresql" else set()
     for enum_name, values in MISSING_ENUM_VALUES.items():
+        if enum_name not in enums:
+            continue
         for value in values:
             try:
                 sql = text(f"ALTER TYPE \"{enum_name}\" ADD VALUE IF NOT EXISTS '{value}'")
-                await conn.execute(sql)
+                async with conn.begin_nested():
+                    await conn.execute(sql)
                 logger.info(f"Migration: added enum value {enum_name}.{value}")
             except Exception as e:
                 logger.warning(f"Migration: skipped enum value {enum_name}.{value} ({e})")
     for table, col_name, index_name in MISSING_UNIQUE_INDEXES:
+        if table not in tables:
+            continue
         try:
             sql = text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
-            await conn.execute(sql)
+            async with conn.begin_nested():
+                await conn.execute(sql)
             logger.info(f"Migration: added unique index {index_name}")
         except Exception as e:
             logger.warning(f"Migration: skipped unique index {index_name} ({e})")
     for table, col_name, index_name in MISSING_INDEXES:
+        if table not in tables:
+            continue
         try:
             sql = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
-            await conn.execute(sql)
+            async with conn.begin_nested():
+                await conn.execute(sql)
             logger.info(f"Migration: added index {index_name}")
         except Exception as e:
             logger.warning(f"Migration: skipped index {index_name} ({e})")
 
 
 async def run_migration_raw(db_session):
-    """Add missing columns using an existing async session (raw SQL)."""
-    for table, columns in MISSING_COLUMNS.items():
-        for col_name, col_type in columns:
-            try:
-                sql = text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS {col_name} {col_type}')
-                await db_session.execute(sql)
-                await db_session.commit()
-                logger.info(f"Migration: added {table}.{col_name}")
-            except Exception as e:
-                await db_session.rollback()
-                logger.warning(f"Migration: skipped {table}.{col_name} ({e})")
-    for enum_name, values in MISSING_ENUM_VALUES.items():
-        for value in values:
-            try:
-                sql = text(f"ALTER TYPE \"{enum_name}\" ADD VALUE IF NOT EXISTS '{value}'")
-                await db_session.execute(sql)
-                await db_session.commit()
-                logger.info(f"Migration: added enum value {enum_name}.{value}")
-            except Exception as e:
-                await db_session.rollback()
-                logger.warning(f"Migration: skipped enum value {enum_name}.{value} ({e})")
-    for table, col_name, index_name in MISSING_UNIQUE_INDEXES:
-        try:
-            sql = text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
-            await db_session.execute(sql)
-            await db_session.commit()
-            logger.info(f"Migration: added unique index {index_name}")
-        except Exception as e:
-            await db_session.rollback()
-            logger.warning(f"Migration: skipped unique index {index_name} ({e})")
-    for table, col_name, index_name in MISSING_INDEXES:
-        try:
-            sql = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({col_name})')
-            await db_session.execute(sql)
-            await db_session.commit()
-            logger.info(f"Migration: added index {index_name}")
-        except Exception as e:
-            await db_session.rollback()
-            logger.warning(f"Migration: skipped index {index_name} ({e})")
+    await run_migration_async(await db_session.connection())
+    await db_session.commit()

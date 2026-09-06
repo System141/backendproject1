@@ -1,6 +1,6 @@
 """Watchlist API (doc §10.5): follow/unfollow auctions, synced across devices."""
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,24 +11,30 @@ from app.core.security import get_current_user
 from app.models.domain import Watchlist, Auction, User, PUBLIC_AUCTION_STATUSES
 from app.schemas.auction import AuctionResponse
 from app.services.auctions import build_auction_response
+from app.services.pagination import page_query
 
 watchlist_router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
 
 @watchlist_router.get("", response_model=list[AuctionResponse])
 async def list_watchlist(
+    response: Response,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    auction_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List the current user's watched auctions."""
-    result = await db.execute(
+    result = await page_query(db,
         select(Auction)
         .join(Watchlist, Watchlist.auction_id == Auction.id)
-        .options(selectinload(Auction.images), selectinload(Auction.seller).selectinload(User.seller_profile))
+        .options(selectinload(Auction.seller).selectinload(User.seller_profile))
         .where(
             Watchlist.user_id == current_user.id,
+            Auction.id == auction_id if auction_id else True,
             Auction.status.in_(PUBLIC_AUCTION_STATUSES),
-        )
+        ).order_by(Auction.created_at.desc(), Auction.id), response, limit, offset,
     )
     return [build_auction_response(a) for a in result.scalars().all()]
 

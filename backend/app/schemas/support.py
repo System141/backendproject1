@@ -19,6 +19,7 @@ class SupportTicketUpdateRequest(BaseModel):
 class SupportTicketResponse(BaseModel):
     id: str
     user_id: str
+    user_name: Optional[str] = None
     subject: str
     message: str
     category: str
